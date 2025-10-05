@@ -237,7 +237,15 @@ const listPage = `
     const take = ${model.name}Resource.list?.perPage ?? 20;
     const skip = (page - 1) * take;
 
-    // Build 'where' for simple search across configured fields
+    // Sorting
+    const defaultSort = ${JSON.stringify(
+      model.hasCreatedAt ? { key: "createdAt", dir: "desc" } : null
+    )};
+    const sortKey = typeof searchParams?.sort === "string" ? searchParams.sort : (defaultSort?.key ?? "");
+    const sortDir = (typeof searchParams?.dir === "string" ? searchParams.dir : (defaultSort?.dir ?? "asc")) as "asc" | "desc";
+    const orderBy = sortKey ? { [sortKey]: sortDir } : ${model.hasCreatedAt ? `{ createdAt: "desc" as const }` : "{}"};
+
+    // Search
     const searchable = ${model.name}Resource.list?.searchable ?? [];
     const where = q && searchable.length
       ? { OR: searchable.map((f) => ({ [f]: { contains: q, mode: "insensitive" as const } })) }
@@ -246,7 +254,7 @@ const listPage = `
     const [items, total] = await Promise.all([
       prisma.${model.name.toLowerCase()}.findMany({
         where,
-        ${model.hasCreatedAt ? "orderBy: { createdAt: 'desc' }," : ""}
+        orderBy,
         skip,
         take,
       }),
@@ -261,14 +269,15 @@ const listPage = `
       )}) as any;
 
     const columns: Column<${model.name}>[] = baseColumns.map((c) => {
-      if ((c as any).format === "datetime") {
-        return { ...c, cell: (row) => new Date((row as any)[c.key] as any).toLocaleString() };
+      const fmt = (c as any).format as "datetime" | "date" | "boolean" | undefined;
+      if (fmt === "datetime") {
+        return { ...c, cell: (row) => new Date((row as unknown as Record<string, unknown>)[c.key] as string).toLocaleString() };
       }
-      if ((c as any).format === "date") {
-        return { ...c, cell: (row) => new Date((row as any)[c.key] as any).toLocaleDateString() };
+      if (fmt === "date") {
+        return { ...c, cell: (row) => new Date((row as unknown as Record<string, unknown>)[c.key] as string).toLocaleDateString() };
       }
-      if ((c as any).format === "boolean") {
-        return { ...c, cell: (row) => ((row as any)[c.key] ? "Yes" : "No") };
+      if (fmt === "boolean") {
+        return { ...c, cell: (row) => (((row as unknown as Record<string, unknown>)[c.key]) ? "Yes" : "No") };
       }
       return c;
     });
@@ -283,6 +292,27 @@ const listPage = `
     }
 
     const totalPages = Math.max(1, Math.ceil(total / take));
+
+    const qs = (next: Record<string,string|number>) => {
+      const p = new URLSearchParams();
+      if (q) p.set("q", q);
+      p.set("page", String(next.page ?? page));
+      p.set("sort", String(next.sort ?? sortKey));
+      p.set("dir", String(next.dir ?? sortDir));
+      return \`?\${p.toString()}\`;
+    };
+
+    const headerLink = (key: string, label?: string) => {
+      const active = sortKey === key;
+      const nextDir = active && sortDir === "asc" ? "desc" : "asc";
+      const base = \`/admin/${plural}\${qs({ page: 1, sort: key, dir: active ? nextDir : "asc" })}\`;
+      return (
+        <a href={base} className="hover:underline">
+          {label ?? key}
+          {active ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+        </a>
+      );
+    };
 
     return (
       <section className="space-y-4">
@@ -305,38 +335,65 @@ const listPage = `
             placeholder={"Search " + (${model.name}Resource.list?.searchable ?? []).join(", ")}
             className="w-72 rounded border px-3 py-2 text-sm"
           />
+          <input type="hidden" name="sort" value={sortKey} />
+          <input type="hidden" name="dir" value={sortDir} />
           <button className="rounded border px-3 py-2 text-sm" type="submit">Search</button>
         </form>
 
-        <SimpleTable
-          rows={items}
-          columns={columns}
-          empty={"No ${model.name.toLowerCase()}s found."}
-          actions={(row) => (
-            <div className="flex gap-3">
-              <Link className="underline" href={"/admin/${plural}/" + row.${idName} + "/edit"}>Edit</Link>
-              <form action={del}>
-                <input type="hidden" name="${idName}" value={String(row.${idName})} />
-                <button type="submit" className="text-red-600 underline">Delete</button>
-              </form>
-            </div>
-          )}
-        />
+        <div className="overflow-x-auto rounded border bg-white">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-gray-100">
+              <tr>
+                {columns.map((c) => (
+                  <th key={String(c.key)} className="px-3 py-2">
+                    {headerLink(String(c.key), c.header)}
+                  </th>
+                ))}
+                <th className="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((row) => (
+                <tr key={String((row as unknown as Record<string, unknown>).${idName})} className="border-t">
+                  {columns.map((c) => (
+                    <td key={String(c.key)} className="px-3 py-2">
+                      {c.cell ? c.cell(row) : String((row as unknown as Record<string, unknown>)[c.key] ?? "")}
+                    </td>
+                  ))}
+                  <td className="px-3 py-2">
+                    <div className="flex gap-3">
+                      <Link className="underline" href={"/admin/${plural}/" + String((row as unknown as Record<string, unknown>).${idName}) + "/edit"}>Edit</Link>
+                      <form action={del}>
+                        <input type="hidden" name="${idName}" value={String((row as unknown as Record<string, unknown>).${idName})} />
+                        <button type="submit" className="text-red-600 underline">Delete</button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {items.length === 0 && (
+                <tr><td className="px-3 py-6 text-center text-gray-500" colSpan={columns.length + 1}>No records.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-        {/* Pagination */}
+                {/* Pagination */}
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-600">Page {page} of {totalPages}</span>
           <div className="ml-auto flex gap-2">
             <a
-              className="rounded border px-3 py-1 text-sm disabled:opacity-50"
-              href={\`?q=\${encodeURIComponent(q)}&page=\${Math.max(1, page - 1)}\`}
-              aria-disabled={page <= 1}
-            >Prev</a>
+              className={\`rounded border px-3 py-1 text-sm \${page <= 1 ? "pointer-events-none opacity-50" : ""}\`}
+              href={qs({ page: Math.max(1, page - 1) })}
+            >
+              Prev
+            </a>
             <a
-              className="rounded border px-3 py-1 text-sm disabled:opacity-50"
-              href={\`?q=\${encodeURIComponent(q)}&page=\${Math.min(totalPages, page + 1)}\`}
-              aria-disabled={page >= totalPages}
-            >Next</a>
+              className={\`rounded border px-3 py-1 text-sm \${page >= totalPages ? "pointer-events-none opacity-50" : ""}\`}
+              href={qs({ page: Math.min(totalPages, page + 1) })}
+            >
+              Next
+            </a>
           </div>
         </div>
       </section>
@@ -426,9 +483,7 @@ const listPage = `
       console.log(chalk.green(`✅ Generated admin pages for ${model.name}`));
     }
 
-    /* =========================
-       📦 NEW: write registry.ts
-       ========================= */
+    // ---- registry.ts ----
     const resourceFiles = (await fs.readdir(genDir)).filter((f) =>
       f.endsWith("Resource.ts")
     );
@@ -442,18 +497,29 @@ const listPage = `
 
     const registryArray = resourceFiles
       .map((f) => f.replace("Resource.ts", "Resource"))
-      .join(", ");
+      .join(",\n  ");
 
     const registryText = `
-      // Auto-generated by Switchboard CLI
+      // Auto-generated by Switchboard CLI (safe to keep under version control)
+      import { overrides, mergeResource } from "@/switchboard/overrides";
       ${registryImports}
-      export const resources = [${registryArray}] as const;
+
+      const baseResources = [
+        ${registryArray}
+      ];
+
+      export const resources = baseResources.map((res) => {
+        const ov = (overrides as Record<string, unknown>)[res.resource] as Partial<typeof res> | undefined;
+        return mergeResource(res, ov);
+      });
     `;
+
     await fs.outputFile(
       path.join(projectRoot, "src/switchboard/registry.ts"),
       await format(registryText),
       "utf8"
     );
+
     console.log(chalk.green("✅ Updated src/switchboard/registry.ts"));
 
     // Generate /admin layout + index that use the registry
