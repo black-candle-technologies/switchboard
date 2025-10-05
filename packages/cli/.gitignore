@@ -1,0 +1,34 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Build outputs
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Env and local config
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# Test caches
+.jest/
+.cache/
+.tmp/

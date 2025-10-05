@@ -1,16 +1,32 @@
 {
-  "name": "@lanebucher/switchboard-cli",
-  "version": "0.1.0",
+  "name": "@lanebucher/switchboard",
+  "version": "0.4.0",
+  "private": false,
   "type": "module",
   "bin": {
-    "switchboard": "./bin/switchboard.js"
+    "switchboard": "bin/switchboard.js"
   },
-  "scripts": {
-    "dev": "node ./bin/switchboard.js"
+  "files": [
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "author": "Lane Bucher <lane.bucher15@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LaneBucher/switchboard.git"
+  },
+  "bugs": {
+    "url": "https://github.com/LaneBucher/switchboard/issues"
+  },
+  "homepage": "https://github.com/LaneBucher/switchboard#readme",
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
-    "commander": "^12.0.0",
     "chalk": "^5.3.0",
+    "commander": "^12.1.0",
     "fs-extra": "^11.2.0",
     "prettier": "^3.3.3"
   }
