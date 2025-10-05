@@ -94,4 +94,6 @@ page.tsx
 new/page.tsx
 [id]/edit/page.tsx
 layout.tsx
-For questions, feature requests, or contributions, please open an issue on GitHub or reach out directly via email.
+```
+
+## For questions, feature requests, or contributions, please open an issue on GitHub or reach out directly via email.

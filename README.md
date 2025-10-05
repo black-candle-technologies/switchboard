@@ -1,36 +1,141 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Switchboard
+
+**Switchboard** is a modular, open-source admin panel and API
+scaffolding generator designed for modern web applications built with
+**Next.js**, **Prisma**, and **TypeScript**. It lets developers spin up
+fully functional, database-driven admin dashboards in seconds --- and
+extend or customize them with minimal effort.
+
+**NPM PACKAGE** https://www.npmjs.com/package/@lanebucher/switchboard
+
+------------------------------------------------------------------------
+
+## Features
+
+-   **Auto-generation**: Generate CRUD admin pages for any Prisma
+    model instantly.
+-   **Type-safe forms and tables** powered by Zod and TypeScript.
+-   **Composable architecture** -- designed for integration into
+    existing projects.
+-   **Automatic registry**: Keeps all generated resources neatly
+    tracked.
+-   **Smart CLI**: Built using Commander.js, fs-extra, and Prettier
+    for smooth operation.
+-   **Minimal styling** with TailwindCSS out of the box --- easily
+    replaceable.
+
+------------------------------------------------------------------------
 
 ## Getting Started
 
-First, run the development server:
+### 1. Clone the Repository
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+``` bash
+git clone https://github.com/LaneBucher/switchboard.git
+cd switchboard
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Install Dependencies
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+``` bash
+npm install
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 3. Link the CLI Locally (for development/testing)
 
-## Learn More
+``` bash
+cd packages/cli
+npm link
+```
 
-To learn more about Next.js, take a look at the following resources:
+This will globally register the `switchboard` command.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 4. Run Switchboard in a Project
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Inside any **Next.js + Prisma** project with a valid `schema.prisma`,
+run:
 
-## Deploy on Vercel
+``` bash
+switchboard generate --pages
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+This will create:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+-   Resource definitions under `src/switchboard/generated`
+-   Admin pages under `src/app/admin` (with list, new, and edit views)
+-   An automatic `registry.ts` linking all generated resources
+
+------------------------------------------------------------------------
+
+## Development Workflow
+
+Switchboard uses a monorepo layout:
+
+    switchboard/
+    ├── packages/
+    │   └── cli/        # CLI package (published to npm as @lanebucher/switchboard)
+    ├── src/            # Core logic and shared utilities
+    ├── prisma/         # Example schema and seed files
+    └── README.md
+
+### Commands
+
+  Command                  Description
+  ------------------------ ---------------------------------------------
+  `npm run dev`            Starts the Next.js app (for local testing).
+  `npm run db:seed`        Seeds the local SQLite database.
+  `switchboard generate`   Generates new resources and pages.
+
+------------------------------------------------------------------------
+
+## Publishing the CLI
+
+### Step 1: Increment the Version
+
+``` bash
+npm version patch -m "chore(release): %s"
+```
+
+### Step 2: Publish to npm
+
+``` bash
+npm publish --access public
+```
+
+Ensure your `package.json` in `packages/cli` has the correct scope and
+metadata (e.g., `@lanebucher/switchboard`).
+
+------------------------------------------------------------------------
+
+## Testing Locally in Another Project
+
+1.  Run this in your Switchboard repo root:
+
+    ``` bash
+    cd packages/cli
+    npm link
+    ```
+
+2.  Then in another project:
+
+    ``` bash
+    npm link @lanebucher/switchboard
+    ```
+
+Now you can use `switchboard generate` directly in that project.
+
+------------------------------------------------------------------------
+
+## License
+
+This project is licensed under the **MIT License**.
+
+**Copyright (c) 2025 Lane Bucher**\
+Email: <lane.bucher15@gmail.com>
+
+------------------------------------------------------------------------
+
+## Contributing
+
+Contributions, issues, and feature requests are welcome.\
+Feel free to open a pull request or submit an issue on GitHub.
