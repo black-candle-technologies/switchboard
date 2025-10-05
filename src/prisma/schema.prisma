@@ -20,4 +20,59 @@ model User {
   name      String
   email     String   @unique
   role      Role     @default(USER)
+
+  posts    Post[]
+  projects Project[] @relation("UserProjects")
+  tasks    Task[]    @relation("UserTasks")
+}
+
+// --- Enums ---
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ON_HOLD
+  DONE
+}
+
+// --- New Models ---
+
+model Post {
+  id        String     @id @default(cuid())
+  title     String
+  content   String?
+  status    PostStatus @default(DRAFT)
+  authorId  String
+  author    User       @relation(fields: [authorId], references: [id])
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  status      ProjectStatus @default(ACTIVE)
+  ownerId     String?
+  owner       User?         @relation("UserProjects", fields: [ownerId], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  tasks       Task[]
+}
+
+model Task {
+  id         String    @id @default(cuid())
+  projectId  String
+  project    Project   @relation(fields: [projectId], references: [id])
+  title      String
+  dueDate    DateTime?
+  done       Boolean   @default(false)
+  assigneeId String?
+  assignee   User?     @relation("UserTasks", fields: [assigneeId], references: [id])
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }
