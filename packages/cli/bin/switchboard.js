@@ -137,7 +137,7 @@ program
         (f) => !["id", "createdAt", "updatedAt"].includes(f.name)
       );
 
-      // ---- generated ResourceConfig ----
+      // generated ResourceConfig
       const shapeProps = fieldsForUI
         .map(
           (f) =>
@@ -190,7 +190,7 @@ ${shapeProps}
 
       if (!options.pages) continue;
 
-// ---- admin pages ----
+// admin pages
 const plural = model.name.toLowerCase() + "s";
 const adminDir = path.join(projectRoot, "src/app/admin", plural);
 
@@ -483,7 +483,7 @@ const listPage = `
       console.log(chalk.green(`✅ Generated admin pages for ${model.name}`));
     }
 
-    // ---- registry.ts ----
+    // registry.ts
     const resourceFiles = (await fs.readdir(genDir)).filter((f) =>
       f.endsWith("Resource.ts")
     );

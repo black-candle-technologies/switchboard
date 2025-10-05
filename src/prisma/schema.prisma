@@ -26,7 +26,7 @@ model User {
   tasks    Task[]    @relation("UserTasks")
 }
 
-// --- Enums ---
+// Enums
 enum PostStatus {
   DRAFT
   PUBLISHED
@@ -39,7 +39,7 @@ enum ProjectStatus {
   DONE
 }
 
-// --- New Models ---
+// New Models
 
 model Post {
   id        String     @id @default(cuid())

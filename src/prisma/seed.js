@@ -1,10 +1,9 @@
-﻿// src/prisma/seed.ts
-import { PrismaClient, Role, PostStatus, ProjectStatus } from "@prisma/client";
+﻿import { PrismaClient, Role, PostStatus, ProjectStatus } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  // --- Users (keep your original ones) ---
+  // Users - seed (modify as needed)
   const ada = await prisma.user.upsert({
     where: { email: "ada@example.com" },
     update: {},
@@ -29,7 +28,7 @@ async function main() {
     create: { name: "John Appleberry", email: "john@appleberry.com", role: Role.USER },
   });
 
-  // --- Projects ---
+  // Projects
   const projSwitchboard = await prisma.project.upsert({
     where: { id: "seed-proj-1" },
     update: {},
@@ -54,7 +53,7 @@ async function main() {
     },
   });
 
-  // --- Tasks ---
+  // Tasks
   await prisma.task.upsert({
     where: { id: "seed-task-1" },
     update: {},
@@ -92,7 +91,7 @@ async function main() {
     },
   });
 
-  // --- Posts ---
+  // Posts
   await prisma.post.upsert({
     where: { id: "seed-post-1" },
     update: {},

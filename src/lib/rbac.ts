@@ -1,4 +1,3 @@
-// src/lib/rbac.ts
 export type RoleName = "ADMIN" | "MANAGER" | "USER";
 
 export type UserContext = {
