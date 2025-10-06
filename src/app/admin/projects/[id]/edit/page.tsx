@@ -27,7 +27,7 @@ export default async function EditProjectPage({
     <SmartForm
       title="Edit Project"
       fields={ProjectResource.fields}
-      initialValues={existing as any}
+      initialValues={existing as Record<string, unknown>}   // was: as any
       submitLabel="Save"
       cancelHref="/admin/projects"
       action={update}

@@ -27,7 +27,7 @@ export default async function EditUserPage({
     <SmartForm
       title="Edit User"
       fields={UserResource.fields}
-      initialValues={existing as any}
+      initialValues={existing as Record<string, unknown>}
       submitLabel="Save"
       cancelHref="/admin/users"
       action={update}

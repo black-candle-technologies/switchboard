@@ -24,10 +24,11 @@ export default async function EditPostPage({
   }
 
   return (
+    // find the SmartForm and change this prop:
     <SmartForm
       title="Edit Post"
       fields={PostResource.fields}
-      initialValues={existing as any}
+      initialValues={existing as Record<string, unknown>}   // was: as any
       submitLabel="Save"
       cancelHref="/admin/posts"
       action={update}

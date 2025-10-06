@@ -3,12 +3,9 @@ import { Command } from "commander";
 import chalk from "chalk";
 import fs from "fs-extra";
 import path from "path";
-import { fileURLToPath } from "url";
 import prettier from "prettier";
 
 const program = new Command();
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 async function format(text) {
   try {
@@ -212,14 +209,6 @@ const idFromParams =
     ? "Number(params.id)"
     : "params.id";
 
-const orderBy = model.hasCreatedAt
-  ? `orderBy: { createdAt: "desc" },`
-  : ``;
-
-// list page — SimpleTable + typed columns + actions
-const dtFields = model.fields
-  .filter((f) => baseType(f.type) === "DateTime")
-  .map((f) => f.name);
 
 const listPage = `
   import { prisma } from "@/lib/prisma";

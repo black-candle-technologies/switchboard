@@ -1,8 +1,9 @@
+// src/app/admin/posts/page.tsx
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { PostResource } from "@/switchboard/generated/PostResource";
-import { SimpleTable, type Column } from "@/components/table/SimpleTable";
+import type { Column } from "@/components/table/SimpleTable";
 import type { Post } from "@prisma/client";
 
 type PageProps = {
@@ -28,7 +29,7 @@ export default async function PostListPage({ searchParams }: PageProps) {
   const sortDir = (getStr(searchParams?.dir, defaultSort.dir) === "asc" ? "asc" : "desc") as "asc" | "desc";
   const orderBy: Record<string, "asc" | "desc"> = sortKey ? { [sortKey]: sortDir } : { createdAt: "desc" };
 
-  // ---- safe search (only string fields)
+  // ---- safe search (only on string fields)
   // Adjust this whitelist to match your Post model's string fields.
   const stringKeys: ReadonlyArray<keyof Post> = ["title", "content", "authorId"];
   const requested = (PostResource.list?.searchable ?? []) as string[];
@@ -51,7 +52,7 @@ export default async function PostListPage({ searchParams }: PageProps) {
     prisma.post.count({ where }),
   ]);
 
-  // ---- columns (from resource, but typed + safe)
+  // ---- columns (from resource, typed; no filtering that drops everything)
   type GenCol = { key: string; header?: string; format?: "datetime" | "date" | "boolean" };
   const genCols: GenCol[] =
     ((PostResource.list?.columns as unknown) as GenCol[] | undefined) ?? [
@@ -62,12 +63,12 @@ export default async function PostListPage({ searchParams }: PageProps) {
       { key: "createdAt", header: "Created", format: "datetime" },
     ];
 
-  // Keep only keys that exist on Post to avoid runtime access errors
-  const baseColumns: Column<Post>[] = genCols
-    .filter((c) => c.key in ({} as Post))
-    .map((c) => ({ key: c.key as keyof Post, header: c.header }));
+  const baseColumns: Column<Post>[] = genCols.map((c) => ({
+    key: c.key as keyof Post,
+    header: c.header,
+  }));
 
-  // Build a quick lookup for formatting directives
+  // Build a quick lookup for formatting directives  (FIX: remove the extra '>' in the generic)
   const fmtByKey = new Map<string, GenCol["format"]>();
   for (const c of genCols) fmtByKey.set(c.key, c.format);
 
@@ -76,13 +77,15 @@ export default async function PostListPage({ searchParams }: PageProps) {
     if (fmt === "datetime") {
       return {
         ...c,
-        cell: (row) => new Date(String((row as unknown as Record<string, unknown>)[String(c.key)])).toLocaleString(),
+        cell: (row) =>
+          new Date(String((row as unknown as Record<string, unknown>)[String(c.key)])).toLocaleString(),
       };
     }
     if (fmt === "date") {
       return {
         ...c,
-        cell: (row) => new Date(String((row as unknown as Record<string, unknown>)[String(c.key)])).toLocaleDateString(),
+        cell: (row) =>
+          new Date(String((row as unknown as Record<string, unknown>)[String(c.key)])).toLocaleDateString(),
       };
     }
     if (fmt === "boolean") {

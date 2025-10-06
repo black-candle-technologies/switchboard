@@ -27,7 +27,7 @@ export default async function EditTaskPage({
     <SmartForm
       title="Edit Task"
       fields={TaskResource.fields}
-      initialValues={existing as any}
+      initialValues={existing as Record<string, unknown>}   // was: as any
       submitLabel="Save"
       cancelHref="/admin/tasks"
       action={update}
