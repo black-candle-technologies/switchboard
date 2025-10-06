@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { TaskResource } from "@/switchboard/generated/TaskResource";
 import type { Column } from "@/components/table/SimpleTable";
 import type { Task } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 type PageProps = {
   searchParams?: Record<string, string | string[] | undefined>;
@@ -13,38 +14,49 @@ const getStr = (v: string | string[] | undefined, fallback = ""): string =>
   typeof v === "string" ? v : fallback;
 
 export default async function TaskListPage({ searchParams }: PageProps) {
-  // query
-  const q = getStr(searchParams?.q).trim();
+  // --- query params (typed)
+  const q = getStr(searchParams?.q, "").trim();
   const page = Number(getStr(searchParams?.page, "1")) || 1;
+
   const take = TaskResource.list?.perPage ?? 20;
   const skip = (page - 1) * take;
 
-  // sort
+  // --- sorting
   const defaultSort = { key: "createdAt", dir: "desc" as const };
   const sortKey = getStr(searchParams?.sort, defaultSort.key);
-  const sortDir = (getStr(searchParams?.dir, defaultSort.dir) === "asc" ? "asc" : "desc") as "asc" | "desc";
-  const orderBy: Record<string, "asc" | "desc"> = sortKey ? { [sortKey]: sortDir } : { createdAt: "desc" };
+  const sortDir = (getStr(searchParams?.dir, defaultSort.dir) === "asc"
+    ? "asc"
+    : "desc") as "asc" | "desc";
 
-  // search (string fields only)
-  const stringKeys: ReadonlyArray<keyof Task> = ["title", "projectId"];
-  const req = (TaskResource.list?.searchable ?? []) as string[];
-  const searchFields = (req.length ? req : ["title"]).filter(
-    (k): k is keyof Task => (stringKeys as readonly string[]).includes(k)
-  );
+  // explicit orderBy
+  const orderBy: Prisma.TaskOrderByWithRelationInput = sortKey
+    ? ({ [sortKey]: sortDir } as Prisma.TaskOrderByWithRelationInput)
+    : { createdAt: "desc" };
 
-  const where =
-    q && searchFields.length
+  // --- safe search (string fields only)
+  // Adjust fields to match your Task model (title is string; projectId is string in your seed).
+  const where: Prisma.TaskWhereInput =
+    q.length > 0
       ? {
-          OR: searchFields.map((k) => ({
-            [k]: { contains: q, mode: "insensitive" as const },
-          })),
+          OR: [
+            { title:     { contains: q } },
+            { projectId: { contains: q } },
+          ],
         }
       : {};
 
+    const placeholderFields =
+      (TaskResource.list?.searchable?.filter((k) =>
+        // keep only string columns that really exist on Task
+        ["title", "projectId"].includes(k)
+      ) ?? ["title", "projectId"]) as string[];
+
+  // --- data
   const [items, total] = await Promise.all([
     prisma.task.findMany({ where, orderBy, skip, take }),
     prisma.task.count({ where }),
   ]);
+
 
   // columns (typed + safe)
   type GenCol = { key: string; header?: string; format?: "datetime" | "date" | "boolean" };
@@ -138,7 +150,7 @@ export default async function TaskListPage({ searchParams }: PageProps) {
           type="text"
           name="q"
           defaultValue={q}
-          placeholder={"Search " + (searchFields.length ? searchFields : ["title"]).join(", ")}
+          placeholder={"Search " + placeholderFields.join(", ")}
           className="w-72 rounded border px-3 py-2 text-sm"
         />
         <input type="hidden" name="sort" value={sortKey} />

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { PostResource } from "@/switchboard/generated/PostResource";
 import type { Column } from "@/components/table/SimpleTable";
 import type { Post } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 type PageProps = {
   searchParams?: Record<string, string | string[] | undefined>;
@@ -15,42 +16,49 @@ function getStr(param: string | string[] | undefined, fallback = ""): string {
 }
 
 export default async function PostListPage({ searchParams }: PageProps) {
-  // ---- query params (typed)
-  const q = getStr(searchParams?.q).trim();
-  const page = Number(getStr(searchParams?.page, "1")) || 1;
+  // --- query params (typed)
+const q = getStr(searchParams?.q, "").trim();
+const page = Number(getStr(searchParams?.page, "1")) || 1;
 
-  // page size
-  const take = PostResource.list?.perPage ?? 20;
-  const skip = (page - 1) * take;
+const take = PostResource.list?.perPage ?? 20;
+const skip = (page - 1) * take;
 
-  // ---- sorting
-  const defaultSort = { key: "createdAt", dir: "desc" as const };
-  const sortKey = getStr(searchParams?.sort, defaultSort.key);
-  const sortDir = (getStr(searchParams?.dir, defaultSort.dir) === "asc" ? "asc" : "desc") as "asc" | "desc";
-  const orderBy: Record<string, "asc" | "desc"> = sortKey ? { [sortKey]: sortDir } : { createdAt: "desc" };
+// --- sorting
+const defaultSort = { key: "createdAt", dir: "desc" as const };
+const sortKey = getStr(searchParams?.sort, defaultSort.key);
+const sortDir = (getStr(searchParams?.dir, defaultSort.dir) === "asc"
+  ? "asc"
+  : "desc") as "asc" | "desc";
 
-  // ---- safe search (only on string fields)
-  // Adjust this whitelist to match your Post model's string fields.
-  const stringKeys: ReadonlyArray<keyof Post> = ["title", "content", "authorId"];
-  const requested = (PostResource.list?.searchable ?? []) as string[];
-  const searchFields = (requested.length ? requested : ["title", "content"]).filter(
-    (k): k is keyof Post => (stringKeys as readonly string[]).includes(k)
-  );
+// explicit orderBy
+const orderBy: Prisma.PostOrderByWithRelationInput = sortKey
+  ? ({ [sortKey]: sortDir } as Prisma.PostOrderByWithRelationInput)
+  : { createdAt: "desc" };
 
-  const where =
-    q.length > 0 && searchFields.length > 0
-      ? {
-          OR: searchFields.map((k) => ({
-            [k]: { contains: q, mode: "insensitive" as const },
-          })),
-        }
-      : {};
+// --- safe search (string fields only)
+const where: Prisma.PostWhereInput =
+  q.length > 0
+    ? {
+        OR: [
+          { title:   { contains: q } },
+          { content: { contains: q } },
+          // keep if you want id search by string
+          { authorId: { contains: q } },
+        ],
+      }
+    : {};
 
-  // ---- data
-  const [items, total] = await Promise.all([
-    prisma.post.findMany({ where, orderBy, skip, take }),
-    prisma.post.count({ where }),
-  ]);
+  // fields to show in the placeholder only (UI hint)
+const placeholderFields =
+  (PostResource.list?.searchable?.filter((k) =>
+    ["title", "content", "authorId"].includes(k)
+  ) ?? ["title", "content"]) as string[];
+
+// --- data
+const [items, total] = await Promise.all([
+  prisma.post.findMany({ where, orderBy, skip, take }),
+  prisma.post.count({ where }),
+]);
 
   // ---- columns (from resource, typed; no filtering that drops everything)
   type GenCol = { key: string; header?: string; format?: "datetime" | "date" | "boolean" };
@@ -149,7 +157,7 @@ export default async function PostListPage({ searchParams }: PageProps) {
           type="text"
           name="q"
           defaultValue={q}
-          placeholder={"Search " + (searchFields.length ? searchFields : ["title", "content"]).join(", ")}
+          placeholder={"Search " + placeholderFields.join(", ")}
           className="w-72 rounded border px-3 py-2 text-sm"
         />
         <input type="hidden" name="sort" value={sortKey} />

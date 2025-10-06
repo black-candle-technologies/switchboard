@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { UserResource } from "@/switchboard/generated/UserResource";
 import { SimpleTable, type Column } from "@/components/table/SimpleTable";
 import type { User } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 type PageProps = {
   searchParams?: Record<string, string | string[] | undefined>;
@@ -14,31 +15,37 @@ function getStr(param: string | string[] | undefined, fallback = ""): string {
 }
 
 export default async function UserListPage({ searchParams }: PageProps) {
-  // ---- query params (typed) ----
-  const q = getStr(searchParams?.q).trim();
+  // --- query params (typed)
+  const q = getStr(searchParams?.q, "").trim();
   const page = Number(getStr(searchParams?.page, "1")) || 1;
 
   const take = UserResource.list?.perPage ?? 20;
   const skip = (page - 1) * take;
 
-  // Sorting
+  // --- sorting
   const defaultSort = { key: "createdAt", dir: "desc" as const };
   const sortKey = getStr(searchParams?.sort, defaultSort.key);
-  const sortDir = (getStr(searchParams?.dir, defaultSort.dir) === "asc" ? "asc" : "desc") as "asc" | "desc";
-  const orderBy: Record<string, "asc" | "desc"> = sortKey ? { [sortKey]: sortDir } : { createdAt: "desc" };
+  const sortDir = (getStr(searchParams?.dir, defaultSort.dir) === "asc"
+    ? "asc"
+    : "desc") as "asc" | "desc";
 
-  // ---- safe search (only on string fields) ----
-  const where =
+  // Make orderBy explicit so we never pass a weird shape
+  const orderBy: Prisma.UserOrderByWithRelationInput = sortKey
+    ? { [sortKey]: sortDir } as Prisma.UserOrderByWithRelationInput
+    : { createdAt: "desc" };
+
+  // --- safe search (only string fields)
+  const where: Prisma.UserWhereInput =
     q.length > 0
       ? {
           OR: [
-            { name: { contains: q, mode: "insensitive" as const } },
-            { email: { contains: q, mode: "insensitive" as const } },
+            { name: { contains: q } },
+            { email: { contains: q } },
           ],
         }
       : {};
 
-  // ---- data ----
+  // --- data
   const [items, total] = await Promise.all([
     prisma.user.findMany({ where, orderBy, skip, take }),
     prisma.user.count({ where }),

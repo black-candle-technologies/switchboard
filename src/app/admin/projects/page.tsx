@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { ProjectResource } from "@/switchboard/generated/ProjectResource";
 import type { Column } from "@/components/table/SimpleTable";
 import type { Project } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 type PageProps = {
   searchParams?: Record<string, string | string[] | undefined>;
@@ -13,34 +14,46 @@ const getStr = (v: string | string[] | undefined, fallback = ""): string =>
   typeof v === "string" ? v : fallback;
 
 export default async function ProjectListPage({ searchParams }: PageProps) {
-  // query
-  const q = getStr(searchParams?.q).trim();
+  // --- query params (typed)
+  const q = getStr(searchParams?.q, "").trim();
   const page = Number(getStr(searchParams?.page, "1")) || 1;
+
   const take = ProjectResource.list?.perPage ?? 20;
   const skip = (page - 1) * take;
 
-  // sort
+  // --- sorting
   const defaultSort = { key: "createdAt", dir: "desc" as const };
   const sortKey = getStr(searchParams?.sort, defaultSort.key);
-  const sortDir = (getStr(searchParams?.dir, defaultSort.dir) === "asc" ? "asc" : "desc") as "asc" | "desc";
-  const orderBy: Record<string, "asc" | "desc"> = sortKey ? { [sortKey]: sortDir } : { createdAt: "desc" };
+  const sortDir = (getStr(searchParams?.dir, defaultSort.dir) === "asc"
+    ? "asc"
+    : "desc") as "asc" | "desc";
 
-  // search (string fields only)
-  const stringKeys: ReadonlyArray<keyof Project> = ["name", "description"];
-  const req = (ProjectResource.list?.searchable ?? []) as string[];
-  const searchFields = (req.length ? req : ["name", "description"]).filter(
-    (k): k is keyof Project => (stringKeys as readonly string[]).includes(k)
-  );
+  // explicit orderBy
+  const orderBy: Prisma.ProjectOrderByWithRelationInput = sortKey
+    ? ({ [sortKey]: sortDir } as Prisma.ProjectOrderByWithRelationInput)
+    : { createdAt: "desc" };
 
-  const where =
-    q && searchFields.length
+  // --- safe search (string fields only)
+  // Adjust fields to exactly what your Project model has as strings.
+  const where: Prisma.ProjectWhereInput =
+    q.length > 0
       ? {
-          OR: searchFields.map((k) => ({
-            [k]: { contains: q, mode: "insensitive" as const },
-          })),
+          OR: [
+            { name:        { contains: q } },
+            { description: { contains: q } },
+            // add more string fields if you have them, e.g. ownerId:
+            // { ownerId: { contains: q } },
+          ],
         }
       : {};
 
+  const placeholderFields =
+    (ProjectResource.list?.searchable?.filter((k) =>
+      // keep only string columns that really exist on Project
+      ["name", "description"].includes(k)
+    ) ?? ["name", "description"]) as string[];
+
+  // --- data
   const [items, total] = await Promise.all([
     prisma.project.findMany({ where, orderBy, skip, take }),
     prisma.project.count({ where }),
@@ -137,7 +150,7 @@ export default async function ProjectListPage({ searchParams }: PageProps) {
           type="text"
           name="q"
           defaultValue={q}
-          placeholder={"Search " + (searchFields.length ? searchFields : ["name", "description"]).join(", ")}
+          placeholder={"Search " + placeholderFields.join(", ")}
           className="w-72 rounded border px-3 py-2 text-sm"
         />
         <input type="hidden" name="sort" value={sortKey} />
