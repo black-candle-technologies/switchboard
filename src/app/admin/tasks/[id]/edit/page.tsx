@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { SmartForm } from "@/components/form/SmartForm";
 import { TaskResource } from "@/switchboard/generated/TaskResource";
+import { revalidatePath } from "next/cache";
+import type { Prisma } from "@prisma/client";
 
 export default async function EditTaskPage({
   params,
@@ -15,11 +17,22 @@ export default async function EditTaskPage({
 
   async function update(formData: FormData) {
     "use server";
-    const data = Object.fromEntries(formData.entries());
-    await prisma.task.update({
-      where: { id: params.id },
-      data,
-    });
+
+    const title = String(formData.get("title") ?? "");
+
+    const projectIdRaw = formData.get("projectId");
+    const project =
+      projectIdRaw == null || String(projectIdRaw) === ""
+        ? undefined
+        : { connect: { id: String(projectIdRaw) } };
+
+    const data: Prisma.TaskUpdateInput = {
+      title,
+      project, // relation
+    };
+
+    await prisma.task.update({ where: { id: params.id }, data });
+    revalidatePath("/admin/tasks");
     redirect("/admin/tasks");
   }
 

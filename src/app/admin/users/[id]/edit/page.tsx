@@ -2,6 +2,9 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { SmartForm } from "@/components/form/SmartForm";
 import { UserResource } from "@/switchboard/generated/UserResource";
+import { revalidatePath } from "next/cache";
+import type { Prisma } from "@prisma/client";
+import { Role } from "@prisma/client";
 
 export default async function EditUserPage({
   params,
@@ -15,11 +18,17 @@ export default async function EditUserPage({
 
   async function update(formData: FormData) {
     "use server";
-    const data = Object.fromEntries(formData.entries());
-    await prisma.user.update({
-      where: { id: params.id },
-      data,
-    });
+
+    const name = String(formData.get("name") ?? "");
+    const email = String(formData.get("email") ?? "");
+    const roleRaw = formData.get("role");
+    const role =
+      roleRaw == null || String(roleRaw) === "" ? undefined : (String(roleRaw) as Role);
+
+    const data: Prisma.UserUpdateInput = { name, email, role };
+
+    await prisma.user.update({ where: { id: params.id }, data });
+    revalidatePath("/admin/users");
     redirect("/admin/users");
   }
 

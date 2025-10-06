@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { SmartForm } from "@/components/form/SmartForm";
 import { ProjectResource } from "@/switchboard/generated/ProjectResource";
+import { revalidatePath } from "next/cache";
+import type { Prisma } from "@prisma/client";
 
 export default async function EditProjectPage({
   params,
@@ -15,11 +17,19 @@ export default async function EditProjectPage({
 
   async function update(formData: FormData) {
     "use server";
-    const data = Object.fromEntries(formData.entries());
-    await prisma.project.update({
-      where: { id: params.id },
-      data,
-    });
+
+    const name = String(formData.get("name") ?? "");
+    const descRaw = formData.get("description");
+    const description =
+      descRaw == null || String(descRaw).trim() === "" ? null : String(descRaw);
+
+    const data: Prisma.ProjectUpdateInput = {
+      name,
+      description,
+    };
+
+    await prisma.project.update({ where: { id: params.id }, data });
+    revalidatePath("/admin/projects");
     redirect("/admin/projects");
   }
 
