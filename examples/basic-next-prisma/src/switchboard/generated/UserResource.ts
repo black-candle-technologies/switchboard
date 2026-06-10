@@ -39,7 +39,7 @@ export const UserResource: ResourceConfig<UserShape> = {
     },
     {
       name: "passwordHash",
-      label: "PasswordHash",
+      label: "Password Hash",
       required: true,
       widget: {
         type: "password",
@@ -67,7 +67,20 @@ export const UserResource: ResourceConfig<UserShape> = {
   list: {
     perPage: 20,
     searchable: ["name", "username", "email"],
+    sortable: [
+      "id",
+      "name",
+      "username",
+      "email",
+      "role",
+      "createdAt",
+      "updatedAt",
+    ],
     columns: [
+      {
+        key: "id",
+        header: "Id",
+      },
       {
         key: "name",
         header: "Name",
@@ -83,6 +96,16 @@ export const UserResource: ResourceConfig<UserShape> = {
       {
         key: "role",
         header: "Role",
+      },
+      {
+        key: "createdAt",
+        header: "Created At",
+        format: "datetime",
+      },
+      {
+        key: "updatedAt",
+        header: "Updated At",
+        format: "datetime",
       },
     ],
     defaultSort: {

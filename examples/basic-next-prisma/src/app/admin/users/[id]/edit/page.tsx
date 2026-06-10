@@ -5,42 +5,73 @@ import { redirect } from "next/navigation";
 import { SmartForm } from "@/components/form/SmartForm";
 import { UserResource } from "@/switchboard/generated/UserResource";
 import { hashPassword } from "@/switchboard/auth";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 type PageProps = { params: Promise<{ id: string }> };
+
+function actionErrorMessage(error: unknown, operation: "save" | "delete") {
+  console.error(`Switchboard failed to ${operation} User:`, error);
+  if (error instanceof SyntaxError) {
+    return "A JSON field contains invalid JSON.";
+  }
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === "P2002") {
+      return "A record with that unique value already exists.";
+    }
+    if (error.code === "P2003") {
+      return operation === "delete"
+        ? "This record cannot be deleted because other records still reference it."
+        : "A selected related record no longer exists.";
+    }
+    if (error.code === "P2025") return "This record no longer exists.";
+  }
+  return operation === "delete"
+    ? "The record could not be deleted."
+    : "The record could not be saved. Check the values and try again.";
+}
 
 export default async function EditUserPage({ params }: PageProps) {
   const routeParams = await params;
   const id = routeParams.id;
-  const existing = await prisma.user.findUnique({
-    where: { id: id },
-  });
-  if (!existing)
+  const [existing] = await Promise.all([
+    prisma.user.findUnique({ where: { id: id } }),
+  ]);
+  if (!existing) {
     return <div className="sb-card sb-empty-state">Record not found.</div>;
+  }
+  const relationOptions = {};
 
-  async function update(formData: FormData) {
+  async function update(
+    _previousState: { error?: string },
+    formData: FormData,
+  ) {
     "use server";
-    const data: Prisma.UserUncheckedUpdateInput = {
-      name: String(formData.get("name") ?? ""),
-      username: String(formData.get("username") ?? ""),
-      email: String(formData.get("email") ?? ""),
-      passwordHash: formData.get("passwordHash")
-        ? await hashPassword(String(formData.get("passwordHash") ?? ""))
-        : undefined,
-      role: formData.get("role")
-        ? (String(
-            formData.get("role") ?? "",
-          ) as Prisma.UserUncheckedUpdateInput["role"])
-        : undefined,
-    };
-    await prisma.user.update({
-      where: { id: id },
-      data,
-    });
+    try {
+      const data: Prisma.UserUncheckedUpdateInput = {
+        name: String(formData.get("name") ?? ""),
+        username: String(formData.get("username") ?? ""),
+        email: String(formData.get("email") ?? ""),
+        passwordHash: formData.get("passwordHash")
+          ? await hashPassword(String(formData.get("passwordHash") ?? ""))
+          : undefined,
+        role: formData.get("role")
+          ? (String(
+              formData.get("role") ?? "",
+            ) as Prisma.UserUncheckedUpdateInput["role"])
+          : undefined,
+      };
+      await prisma.user.update({
+        where: { id: id },
+        data,
+      });
+    } catch (error) {
+      return { error: actionErrorMessage(error, "save") };
+    }
     revalidatePath("/admin/users");
     redirect("/admin/users");
   }
 
+  const jsonFields = new Set<string>([]);
   const initialValues = Object.fromEntries(
     Object.entries(existing).map(([key, value]) => [
       key,
@@ -48,7 +79,11 @@ export default async function EditUserPage({ params }: PageProps) {
         ? ""
         : value instanceof Date
           ? value.toISOString().slice(0, 16)
-          : value,
+          : typeof value === "bigint"
+            ? String(value)
+            : jsonFields.has(key) && value !== null
+              ? JSON.stringify(value, null, 2)
+              : value,
     ]),
   );
 
@@ -57,6 +92,7 @@ export default async function EditUserPage({ params }: PageProps) {
       title="Edit User"
       fields={UserResource.fields}
       initialValues={initialValues}
+      relationOptions={relationOptions}
       submitLabel="Save"
       cancelHref="/admin/users"
       action={update}

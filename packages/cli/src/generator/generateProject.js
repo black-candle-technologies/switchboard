@@ -6,6 +6,7 @@ import { adminLayoutTemplate } from "../../templates/adminLayout.js";
 import { parsePrismaSchema } from "../parser/prismaSchemaParser.js";
 import { detectGenerationLayout } from "../project/detectProject.js";
 import { importPath } from "../project/importPath.js";
+import { runtimeTemplates } from "./runtimeTemplates.js";
 import {
   applyFileAction,
   describeFileAction,
@@ -24,6 +25,16 @@ function isSwitchboardRegistry(content) {
   );
 }
 
+function lowerFirst(value) {
+  return value[0].toLowerCase() + value.slice(1);
+}
+
+function labelFor(value) {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/^./, (character) => character.toUpperCase());
+}
+
 export async function generateProject({
   projectRoot = process.cwd(),
   model,
@@ -35,285 +46,381 @@ export async function generateProject({
   dryRun = false,
   log = (message) => console.log(chalk.green(message)),
 } = {}) {
-    const options = { model, pages };
-    const detectedLayout = detectGenerationLayout({
-      projectRoot,
-      schemaPath: schemaOption,
-      appDir: appDirOption,
-      out,
+  const options = { model, pages };
+  const detectedLayout = detectGenerationLayout({
+    projectRoot,
+    schemaPath: schemaOption,
+    appDir: appDirOption,
+    out,
+  });
+  const {
+    projectRoot: resolvedProjectRoot,
+    appDir,
+    schemaPath,
+    libDir,
+    componentsDir,
+    outDir,
+    generatedDir: genDir,
+  } = detectedLayout;
+  const results = [];
+
+  if (dryRun) {
+    log("Detected project structure:");
+    log(`  App directory: ${relativePath(resolvedProjectRoot, appDir)}`);
+    log(`  Prisma schema: ${relativePath(resolvedProjectRoot, schemaPath)}`);
+    log(
+      `  Source root: ${relativePath(resolvedProjectRoot, detectedLayout.sourceRoot) || "."}`,
+    );
+    log(
+      detectedLayout.importAlias
+        ? `  Import alias: ${detectedLayout.importAlias.pattern} -> ${detectedLayout.importAlias.target}`
+        : "  Import alias: none (using relative imports)",
+    );
+    log(`  Output directory: ${relativePath(resolvedProjectRoot, outDir)}`);
+  }
+
+  const writeGeneratedFile = async (
+    filePath,
+    source,
+    { allowUpdate = false, isSafeToUpdate } = {},
+  ) => {
+    const content = await formatTypeScript(source);
+    const plan = await planFileAction({
+      path: filePath,
+      content,
+      force,
+      allowUpdate,
+      isSafeToUpdate,
     });
-    const {
-      projectRoot: resolvedProjectRoot,
-      appDir,
-      schemaPath,
-      libDir,
-      componentsDir,
-      outDir,
-      generatedDir: genDir,
-    } = detectedLayout;
-    const results = [];
+    const displayPath = relativePath(resolvedProjectRoot, filePath);
+    results.push({ action: plan.action, path: displayPath });
+    await applyFileAction(plan, { dryRun });
+    log(describeFileAction(plan, displayPath, { dryRun }));
+    return plan;
+  };
 
-    if (dryRun) {
-      log("Detected project structure:");
-      log(`  App directory: ${relativePath(resolvedProjectRoot, appDir)}`);
-      log(`  Prisma schema: ${relativePath(resolvedProjectRoot, schemaPath)}`);
-      log(
-        `  Source root: ${relativePath(resolvedProjectRoot, detectedLayout.sourceRoot) || "."}`,
+  const schema = await fs.readFile(schemaPath, "utf8");
+
+  const { enums, models } = parsePrismaSchema(schema, schemaPath);
+
+  // Helpers
+  const baseType = (t) => t.replace(/\?$/, "").replace(/\[\]$/, "");
+  const isOptional = (t) => t.endsWith("?");
+  const isArray = (t) => t.replace(/\?$/, "").endsWith("[]");
+  const hasDefault = (field) => /(?:^|\s)@default\s*\(/.test(field.attrs);
+  const isUpdatedAt = (field) => /(?:^|\s)@updatedAt(?:\s|$)/.test(field.attrs);
+  const scalarTypes = new Set([
+    "String",
+    "Int",
+    "Float",
+    "Decimal",
+    "BigInt",
+    "Boolean",
+    "DateTime",
+    "Json",
+    "Bytes",
+  ]);
+  const isScalarField = (field) => {
+    const type = baseType(field.type);
+    return (
+      !isArray(field.type) && (scalarTypes.has(type) || Boolean(enums[type]))
+    );
+  };
+  const modelByName = new Map(
+    models.map((schemaModel) => [schemaModel.name, schemaModel]),
+  );
+  const relationForField = (schemaModel, field) => {
+    for (const relationField of schemaModel.fields) {
+      const relationModel = modelByName.get(baseType(relationField.type));
+      if (!relationModel || isArray(relationField.type)) continue;
+
+      const relationMatch = relationField.attrs.match(
+        /@relation\s*\([\s\S]*?fields\s*:\s*\[([^\]]+)\][\s\S]*?references\s*:\s*\[([^\]]+)\][\s\S]*?\)/,
       );
-      log(
-        detectedLayout.importAlias
-          ? `  Import alias: ${detectedLayout.importAlias.pattern} -> ${detectedLayout.importAlias.target}`
-          : "  Import alias: none (using relative imports)",
-      );
-      log(`  Output directory: ${relativePath(resolvedProjectRoot, outDir)}`);
-    }
+      if (!relationMatch) continue;
 
-    const writeGeneratedFile = async (
-      filePath,
-      source,
-      { allowUpdate = false, isSafeToUpdate } = {},
-    ) => {
-      const content = await formatTypeScript(source);
-      const plan = await planFileAction({
-        path: filePath,
-        content,
-        force,
-        allowUpdate,
-        isSafeToUpdate,
-      });
-      const displayPath = relativePath(resolvedProjectRoot, filePath);
-      results.push({ action: plan.action, path: displayPath });
-      await applyFileAction(plan, { dryRun });
-      log(describeFileAction(plan, displayPath, { dryRun }));
-      return plan;
-    };
+      const foreignKeys = relationMatch[1]
+        .split(",")
+        .map((value) => value.trim());
+      const referenceKeys = relationMatch[2]
+        .split(",")
+        .map((value) => value.trim());
+      const fieldIndex = foreignKeys.indexOf(field.name);
+      if (fieldIndex === -1 || !referenceKeys[fieldIndex]) continue;
 
-    const schema = await fs.readFile(schemaPath, "utf8");
+      const valueKey = referenceKeys[fieldIndex];
+      const labelField =
+        relationModel.fields.find(
+          (candidate) =>
+            ["name", "title", "label", "email", "username"].includes(
+              candidate.name,
+            ) &&
+            baseType(candidate.type) === "String" &&
+            !isArray(candidate.type),
+        ) ??
+        relationModel.fields.find(
+          (candidate) =>
+            candidate.name === valueKey && isScalarField(candidate),
+        );
 
-    const { enums, models } = parsePrismaSchema(schema, schemaPath);
-
-    // Helpers
-    const baseType = (t) => t.replace(/\?$/, "").replace(/\[\]$/, "");
-    const isOptional = (t) => t.endsWith("?");
-    const isArray = (t) => t.replace(/\?$/, "").endsWith("[]");
-    const hasDefault = (field) =>
-      /(?:^|\s)@default\s*\(/.test(field.attrs);
-    const isUpdatedAt = (field) =>
-      /(?:^|\s)@updatedAt(?:\s|$)/.test(field.attrs);
-    const scalarTypes = new Set([
-      "String",
-      "Int",
-      "Float",
-      "Decimal",
-      "BigInt",
-      "Boolean",
-      "DateTime",
-      "Json",
-      "Bytes",
-    ]);
-    const isScalarField = (field) => {
-      const type = baseType(field.type);
-      return !isArray(field.type) && (scalarTypes.has(type) || Boolean(enums[type]));
-    };
-    const formValueFor = (field, prismaInputType, mode) => {
-      const type = baseType(field.type);
-      const value = `formData.get("${field.name}")`;
-      const stringValue = `String(${value} ?? "")`;
-      const emptyValue = hasDefault(field)
-        ? "undefined"
-        : isOptional(field.type)
-          ? "null"
-          : '""';
-
-      if (["password", "passwordHash"].includes(field.name)) {
-        return mode === "edit"
-          ? `${value} ? await hashPassword(${stringValue}) : undefined`
-          : `await hashPassword(${stringValue})`;
-      }
-      if (enums[type]) {
-        const enumValue = `${stringValue} as ${prismaInputType}["${field.name}"]`;
-        return hasDefault(field) || isOptional(field.type)
-          ? `${value} ? ${enumValue} : ${emptyValue}`
-          : enumValue;
-      }
-      switch (type) {
-        case "Int":
-        case "Float":
-        case "Decimal":
-          return isOptional(field.type) || hasDefault(field)
-            ? `${value} ? Number(${value}) : ${emptyValue}`
-            : `Number(${value})`;
-        case "BigInt":
-          return isOptional(field.type) || hasDefault(field)
-            ? `${value} ? BigInt(${stringValue}) : ${emptyValue}`
-            : `BigInt(${stringValue})`;
-        case "Boolean":
-          return `formData.has("${field.name}")`;
-        case "DateTime":
-          return isOptional(field.type) || hasDefault(field)
-            ? `${value} ? new Date(${stringValue}) : ${emptyValue}`
-            : `new Date(${stringValue})`;
-        case "Json":
-          return `${value} ? JSON.parse(${stringValue}) : ${emptyValue}`;
-        case "Bytes":
-          return `Buffer.from(${stringValue})`;
-        default:
-          return isOptional(field.type) || hasDefault(field)
-            ? `${value} ? ${stringValue} : ${emptyValue}`
-            : stringValue;
-      }
-    };
-    const tsTypeFor = (prismaTypeRaw) => {
-      const base = baseType(prismaTypeRaw);
-      let ts;
-      switch (base) {
-        case "String":
-          ts = "string";
-          break;
-        case "Int":
-        case "Float":
-        case "Decimal":
-          ts = "number";
-          break;
-        case "BigInt":
-          ts = "string";
-          break;
-        case "Boolean":
-          ts = "boolean";
-          break;
-        case "DateTime":
-          ts = "string"; // form-friendly
-          break;
-        case "Json":
-          ts = "unknown";
-          break;
-        default:
-          ts = enums[base]
-            ? enums[base].map((v) => JSON.stringify(v)).join(" | ")
-            : "unknown";
-      }
-      if (isArray(prismaTypeRaw)) ts = `${ts}[]`;
-      return ts;
-    };
-    const widgetFor = (fieldName, prismaTypeRaw, modelFields) => {
-      const b = baseType(prismaTypeRaw);
-
-      // Heuristic: relation if field ends with 'Id' and a sibling object field matches (e.g., authorId + author User)
-      if (/Id$/.test(fieldName)) {
-        const guessModel = fieldName.replace(/Id$/, "");
-        const objectField = modelFields.find((mf) => baseType(mf.type) === guessModel[0].toUpperCase() + guessModel.slice(1));
-        if (objectField) {
-          return { type: "relation", model: (objectField.type.replace(/\?$/, "")) };
-        }
-      }
-
-      if (enums[b]) {
-        return { type: "select", options: enums[b].map((v) => ({ value: v, label: v })) };
-      }
-      if (b === "Boolean") return { type: "checkbox" };
-      if (b === "DateTime") return { type: "datetime" };
-      if (b === "String" && /content|description|body/i.test(fieldName)) {
-        return { type: "textarea", rows: 8 };
-      }
-      if (b === "String" && /^(?:password|passwordHash)$/i.test(fieldName)) {
-        return { type: "password" };
-      }
-      if (b === "String" && /email/i.test(fieldName)) return { type: "email" };
-      return { type: "text" };
-    };
-    const pageModels = options.model
-      ? models.filter((model) => model.name === options.model)
-      : models;
-    if (options.model && pageModels.length === 0) {
-      throw new Error(
-        `Model "${options.model}" was not found in Prisma schema "${schemaPath}".`,
-      );
-    }
-
-    if (options.pages) {
-      const supportedIdTypes = new Set(["String", "Int", "BigInt"]);
-      for (const model of pageModels) {
-        if (model.compoundIdFields.length > 0) {
-          throw new Error(
-            `Cannot generate admin pages for model "${model.name}": compound IDs ` +
-              `(@@id([${model.compoundIdFields.join(", ")}])) are not supported. ` +
-              "Use a single String, Int, or BigInt @id field, or run without --pages.",
-          );
-        }
-        if (model.idFields.length !== 1 || !model.idField) {
-          throw new Error(
-            `Cannot generate admin pages for model "${model.name}": expected one explicit scalar @id field. ` +
-              "Add a single String, Int, or BigInt @id field, or run without --pages.",
-          );
-        }
-        const idType = baseType(model.idField.type);
-        if (!isScalarField(model.idField) || !supportedIdTypes.has(idType)) {
-          throw new Error(
-            `Cannot generate admin pages for model "${model.name}": primary key ` +
-              `"${model.idField.name}" has unsupported type "${model.idField.type}". ` +
-              "Use a single String, Int, or BigInt @id field, or run without --pages.",
-          );
-        }
-      }
-    }
-
-    // Generate configs and pages
-    for (const model of models) {
-      if (options.model && options.model !== model.name) continue;
-
-      const fieldsForUI = model.fields.filter(
-        (f) =>
-          !(f === model.idField && hasDefault(f)) &&
-          !isUpdatedAt(f) &&
-          !(
-            ["createdAt", "updatedAt"].includes(f.name) &&
-            hasDefault(f)
-          ) &&
-          isScalarField(f)
-      );
-
-      // generated ResourceConfig
-      const shapeProps = fieldsForUI
-        .map(
-          (f) =>
-            `  ${f.name}${isOptional(f.type) || hasDefault(f) ? "?" : ""}: ${tsTypeFor(f.type)};`
-        )
-        .join("\n");
-
-      const resourceFields = fieldsForUI.map((f) => ({
-        name: f.name,
-        label: f.name[0].toUpperCase() + f.name.slice(1),
-        required: !isOptional(f.type) && !hasDefault(f),
-        widget: widgetFor(f.name, f.type, model.fields),
-      }));
-
-      const configObject = {
-        resource: model.name,
-        displayName: model.name + "s",
-        fields: resourceFields,
-        list: {
-          perPage: 20,
-          searchable: fieldsForUI
-            .filter(
-              (f) =>
-                ["String"].includes(baseType(f.type)) &&
-                !["password", "passwordHash"].includes(f.name),
-            )
-            .map((f) => f.name),
-          columns: fieldsForUI
-            .filter((f) => !["password", "passwordHash"].includes(f.name))
-            .map((f) => ({
-              key: f.name,
-              header: f.name[0].toUpperCase() + f.name.slice(1),
-              format: baseType(f.type) === "DateTime" ? "datetime" : baseType(f.type) === "Boolean" ? "boolean" : undefined
-            })),
-          defaultSort: model.hasCreatedAt ? { key: "createdAt", dir: "desc" } : undefined,
-        },
+      return {
+        foreignKey: field.name,
+        relationField: relationField.name,
+        model: relationModel.name,
+        delegate: lowerFirst(relationModel.name),
+        valueKey,
+        labelKey: labelField?.name ?? valueKey,
       };
-      const resourcePath = path.join(genDir, `${model.name}Resource.ts`);
-      const typesPath = path.join(outDir, "types.ts");
+    }
+    return undefined;
+  };
+  const relationsFor = (schemaModel) =>
+    schemaModel.fields
+      .filter(isScalarField)
+      .map((field) => relationForField(schemaModel, field))
+      .filter(Boolean);
+  const formValueFor = (field, prismaInputType, mode) => {
+    const type = baseType(field.type);
+    const value = `formData.get("${field.name}")`;
+    const stringValue = `String(${value} ?? "")`;
+    const emptyValue = hasDefault(field)
+      ? "undefined"
+      : isOptional(field.type)
+        ? "null"
+        : '""';
 
-      const configFile = `
+    if (["password", "passwordHash"].includes(field.name)) {
+      return mode === "edit"
+        ? `${value} ? await hashPassword(${stringValue}) : undefined`
+        : `await hashPassword(${stringValue})`;
+    }
+    if (enums[type]) {
+      const enumValue = `${stringValue} as ${prismaInputType}["${field.name}"]`;
+      return hasDefault(field) || isOptional(field.type)
+        ? `${value} ? ${enumValue} : ${emptyValue}`
+        : enumValue;
+    }
+    switch (type) {
+      case "Int":
+      case "Float":
+      case "Decimal":
+        return isOptional(field.type) || hasDefault(field)
+          ? `${value} ? Number(${value}) : ${emptyValue}`
+          : `Number(${value})`;
+      case "BigInt":
+        return isOptional(field.type) || hasDefault(field)
+          ? `${value} ? BigInt(${stringValue}) : ${emptyValue}`
+          : `BigInt(${stringValue})`;
+      case "Boolean":
+        return isOptional(field.type)
+          ? `${value} ? ${stringValue} === "true" : null`
+          : `${stringValue} === "true"`;
+      case "DateTime":
+        return isOptional(field.type) || hasDefault(field)
+          ? `${value} ? new Date(${stringValue}) : ${emptyValue}`
+          : `new Date(${stringValue})`;
+      case "Json":
+        return `${value} ? JSON.parse(${stringValue}) : ${emptyValue}`;
+      case "Bytes":
+        return `Buffer.from(${stringValue})`;
+      default:
+        return isOptional(field.type) || hasDefault(field)
+          ? `${value} ? ${stringValue} : ${emptyValue}`
+          : stringValue;
+    }
+  };
+  const tsTypeFor = (prismaTypeRaw) => {
+    const base = baseType(prismaTypeRaw);
+    let ts;
+    switch (base) {
+      case "String":
+        ts = "string";
+        break;
+      case "Int":
+      case "Float":
+      case "Decimal":
+        ts = "number";
+        break;
+      case "BigInt":
+        ts = "string";
+        break;
+      case "Boolean":
+        ts = "boolean";
+        break;
+      case "DateTime":
+        ts = "string"; // form-friendly
+        break;
+      case "Json":
+        ts = "unknown";
+        break;
+      default:
+        ts = enums[base]
+          ? enums[base].map((v) => JSON.stringify(v)).join(" | ")
+          : "unknown";
+    }
+    if (isArray(prismaTypeRaw)) ts = `${ts}[]`;
+    return ts;
+  };
+  const widgetFor = (field, relation) => {
+    const fieldName = field.name;
+    const prismaTypeRaw = field.type;
+    const b = baseType(prismaTypeRaw);
+
+    if (relation) {
+      return {
+        type: "relation",
+        model: relation.model,
+        valueKey: relation.valueKey,
+        labelKey: relation.labelKey,
+      };
+    }
+
+    if (enums[b]) {
+      return {
+        type: "select",
+        options: enums[b].map((v) => ({ value: v, label: v })),
+      };
+    }
+    if (b === "Boolean") {
+      return { type: "checkbox", nullable: isOptional(prismaTypeRaw) };
+    }
+    if (["Int", "BigInt"].includes(b)) return { type: "number", step: "1" };
+    if (["Float", "Decimal"].includes(b))
+      return { type: "number", step: "any" };
+    if (b === "DateTime") return { type: "datetime" };
+    if (b === "Json") return { type: "json", rows: 10 };
+    if (b === "String" && /content|description|body/i.test(fieldName)) {
+      return { type: "textarea", rows: 8 };
+    }
+    if (b === "String" && /^(?:password|passwordHash)$/i.test(fieldName)) {
+      return { type: "password" };
+    }
+    if (b === "String" && /email/i.test(fieldName)) return { type: "email" };
+    return { type: "text" };
+  };
+  const pageModels = options.model
+    ? models.filter((model) => model.name === options.model)
+    : models;
+  if (options.model && pageModels.length === 0) {
+    throw new Error(
+      `Model "${options.model}" was not found in Prisma schema "${schemaPath}".`,
+    );
+  }
+
+  if (options.pages) {
+    const supportedIdTypes = new Set(["String", "Int", "BigInt"]);
+    for (const model of pageModels) {
+      if (model.compoundIdFields.length > 0) {
+        throw new Error(
+          `Cannot generate admin pages for model "${model.name}": compound IDs ` +
+            `(@@id([${model.compoundIdFields.join(", ")}])) are not supported. ` +
+            "Use a single String, Int, or BigInt @id field, or run without --pages.",
+        );
+      }
+      if (model.idFields.length !== 1 || !model.idField) {
+        throw new Error(
+          `Cannot generate admin pages for model "${model.name}": expected one explicit scalar @id field. ` +
+            "Add a single String, Int, or BigInt @id field, or run without --pages.",
+        );
+      }
+      const idType = baseType(model.idField.type);
+      if (!isScalarField(model.idField) || !supportedIdTypes.has(idType)) {
+        throw new Error(
+          `Cannot generate admin pages for model "${model.name}": primary key ` +
+            `"${model.idField.name}" has unsupported type "${model.idField.type}". ` +
+            "Use a single String, Int, or BigInt @id field, or run without --pages.",
+        );
+      }
+    }
+  }
+
+  // Generate configs and pages
+  for (const model of models) {
+    if (options.model && options.model !== model.name) continue;
+
+    const fieldsForUI = model.fields.filter(
+      (f) =>
+        !(f === model.idField && hasDefault(f)) &&
+        !isUpdatedAt(f) &&
+        !(["createdAt", "updatedAt"].includes(f.name) && hasDefault(f)) &&
+        isScalarField(f),
+    );
+    const listFields = model.fields.filter(
+      (field) =>
+        isScalarField(field) &&
+        !["password", "passwordHash"].includes(field.name),
+    );
+    const modelRelations = relationsFor(model);
+    const relationByForeignKey = new Map(
+      modelRelations.map((relation) => [relation.foreignKey, relation]),
+    );
+
+    // generated ResourceConfig
+    const shapeProps = fieldsForUI
+      .map(
+        (f) =>
+          `  ${f.name}${isOptional(f.type) || hasDefault(f) ? "?" : ""}: ${tsTypeFor(f.type)};`,
+      )
+      .join("\n");
+
+    const resourceFields = fieldsForUI.map((f) => ({
+      name: f.name,
+      label: labelFor(f.name),
+      required: !isOptional(f.type) && !hasDefault(f),
+      widget: widgetFor(f, relationByForeignKey.get(f.name)),
+    }));
+
+    const configObject = {
+      resource: model.name,
+      displayName: model.name + "s",
+      fields: resourceFields,
+      list: {
+        perPage: 20,
+        searchable: listFields
+          .filter(
+            (f) =>
+              ["String"].includes(baseType(f.type)) &&
+              f !== model.idField &&
+              !relationByForeignKey.has(f.name) &&
+              !["password", "passwordHash"].includes(f.name),
+          )
+          .map((f) => f.name),
+        sortable: listFields
+          .filter(
+            (field) =>
+              !relationByForeignKey.has(field.name) &&
+              !["Json", "Bytes"].includes(baseType(field.type)),
+          )
+          .map((field) => field.name),
+        columns: listFields.map((field) => {
+          const relation = relationByForeignKey.get(field.name);
+          return {
+            key: field.name,
+            header: relation
+              ? labelFor(relation.relationField)
+              : labelFor(field.name),
+            format: relation
+              ? "relation"
+              : baseType(field.type) === "DateTime"
+                ? "datetime"
+                : baseType(field.type) === "Boolean"
+                  ? "boolean"
+                  : baseType(field.type) === "Json"
+                    ? "json"
+                    : undefined,
+            relationField: relation?.relationField,
+            relationLabelKey: relation?.labelKey,
+          };
+        }),
+        defaultSort: model.hasCreatedAt
+          ? { key: "createdAt", dir: "desc" }
+          : undefined,
+      },
+    };
+    const resourcePath = path.join(genDir, `${model.name}Resource.ts`);
+    const typesPath = path.join(outDir, "types.ts");
+
+    const configFile = `
         // ${GENERATED_FILE_MARKER}
         import type { ResourceConfig } from "${importPath(detectedLayout, resourcePath, typesPath)}";
 
@@ -324,37 +431,42 @@ ${shapeProps}
         export const ${model.name}Resource: ResourceConfig<${model.name}Shape> =
           ${JSON.stringify(configObject, null, 2)} as const;
       `;
-      await writeGeneratedFile(resourcePath, configFile);
+    await writeGeneratedFile(resourcePath, configFile);
 
-      if (!options.pages) continue;
+    if (!options.pages) continue;
 
-// admin pages
-const plural = model.name.toLowerCase() + "s";
-const adminDir = path.join(appDir, "admin", plural);
+    // admin pages
+    const plural = model.name.toLowerCase() + "s";
+    const adminDir = path.join(appDir, "admin", plural);
 
-// ensure all nested route dirs exist
-const newDir = path.join(adminDir, "new");
-const idDir = path.join(adminDir, "[id]");
-const editDir = path.join(idDir, "edit");
-const listPagePath = path.join(adminDir, "page.tsx");
-const newPagePath = path.join(newDir, "page.tsx");
-const editPagePath = path.join(editDir, "page.tsx");
-const prismaPath = path.join(libDir, "prisma.ts");
-const smartFormPath = path.join(componentsDir, "form", "SmartForm.tsx");
-const simpleTablePath = path.join(
-  componentsDir,
-  "table",
-  "SimpleTable.tsx",
-);
-const authPath = path.join(outDir, "auth.ts");
-const hasPasswordField = fieldsForUI.some((field) =>
-  ["password", "passwordHash"].includes(field.name),
-);
+    // ensure all nested route dirs exist
+    const newDir = path.join(adminDir, "new");
+    const idDir = path.join(adminDir, "[id]");
+    const editDir = path.join(idDir, "edit");
+    const listPagePath = path.join(adminDir, "page.tsx");
+    const newPagePath = path.join(newDir, "page.tsx");
+    const editPagePath = path.join(editDir, "page.tsx");
+    const prismaPath = path.join(libDir, "prisma.ts");
+    const smartFormPath = path.join(componentsDir, "form", "SmartForm.tsx");
+    const simpleTablePath = path.join(
+      componentsDir,
+      "table",
+      "SimpleTable.tsx",
+    );
+    const deleteButtonPath = path.join(
+      componentsDir,
+      "form",
+      "DeleteButton.tsx",
+    );
+    const authPath = path.join(outDir, "auth.ts");
+    const hasPasswordField = fieldsForUI.some((field) =>
+      ["password", "passwordHash"].includes(field.name),
+    );
 
-const idName = model.idField?.name ?? "id";
-const idTypeBase = baseType(model.idField?.type ?? "String");
+    const idName = model.idField?.name ?? "id";
+    const idTypeBase = baseType(model.idField?.type ?? "String");
 
-const listPage = `
+    const listPage = `
   // ${GENERATED_FILE_MARKER}
   import { prisma } from "${importPath(detectedLayout, listPagePath, prismaPath)}";
   import Link from "next/link";
@@ -405,10 +517,10 @@ const listPage = `
       format?: "datetime" | "date" | "boolean";
     };
     const generatedColumns = (${model.name}Resource.list?.columns ?? ${JSON.stringify(
-        (resourceFields || []).map((f) => ({ key: f.name, header: f.label })),
-        null,
-        2
-      )}) as readonly GeneratedColumn[];
+      (resourceFields || []).map((f) => ({ key: f.name, header: f.label })),
+      null,
+      2,
+    )}) as readonly GeneratedColumn[];
 
     const columns: Column<${model.name}>[] = generatedColumns.map((column) => {
       const baseColumn: Column<${model.name}> = {
@@ -550,8 +662,8 @@ const listPage = `
   }
 `;
 
-      // new page — SmartForm + redirect
-      const newPage = `
+    // new page — SmartForm + redirect
+    const newPage = `
         // ${GENERATED_FILE_MARKER}
         import { prisma } from "${importPath(detectedLayout, newPagePath, prismaPath)}";
         import { revalidatePath } from "next/cache";
@@ -572,7 +684,7 @@ ${fieldsForUI
         field,
         `Prisma.${model.name}UncheckedCreateInput`,
         "create",
-      )},`
+      )},`,
   )
   .join("\n")}
             };
@@ -593,8 +705,8 @@ ${fieldsForUI
         }
       `;
 
-      // edit page — ID type respected
-      const editPage = `
+    // edit page — ID type respected
+    const editPage = `
         // ${GENERATED_FILE_MARKER}
         import { prisma } from "${importPath(detectedLayout, editPagePath, prismaPath)}";
         import { revalidatePath } from "next/cache";
@@ -624,7 +736,7 @@ ${fieldsForUI
         field,
         `Prisma.${model.name}UncheckedUpdateInput`,
         "edit",
-      )},`
+      )},`,
   )
   .join("\n")}
             };
@@ -639,9 +751,13 @@ ${fieldsForUI
           const initialValues = Object.fromEntries(
             Object.entries(existing).map(([key, value]) => [
               key,
-              ${hasPasswordField ? `["password", "passwordHash"].includes(key)
+              ${
+                hasPasswordField
+                  ? `["password", "passwordHash"].includes(key)
                 ? ""
-                : ` : ""}value instanceof Date
+                : `
+                  : ""
+              }value instanceof Date
                 ? value.toISOString().slice(0, 16)
                 : value,
             ])
@@ -660,42 +776,124 @@ ${fieldsForUI
         }
       `;
 
-      await writeGeneratedFile(listPagePath, listPage);
-      await writeGeneratedFile(newPagePath, newPage);
-      await writeGeneratedFile(editPagePath, editPage);
-    }
+    const generatedRuntime = runtimeTemplates({
+      marker: GENERATED_FILE_MARKER,
+      modelName: model.name,
+      plural,
+      delegate: lowerFirst(model.name),
+      idName,
+      idValueExpression:
+        idTypeBase === "Int"
+          ? "Number(rawId)"
+          : idTypeBase === "BigInt"
+            ? "BigInt(rawId)"
+            : "rawId",
+      idExpression:
+        idTypeBase === "Int"
+          ? "Number(routeParams.id)"
+          : idTypeBase === "BigInt"
+            ? "BigInt(routeParams.id)"
+            : "routeParams.id",
+      listPrismaImport: importPath(detectedLayout, listPagePath, prismaPath),
+      deleteButtonImport: importPath(
+        detectedLayout,
+        listPagePath,
+        deleteButtonPath,
+      ),
+      listResourceImport: importPath(
+        detectedLayout,
+        listPagePath,
+        resourcePath,
+      ),
+      newPrismaImport: importPath(detectedLayout, newPagePath, prismaPath),
+      newResourceImport: importPath(detectedLayout, newPagePath, resourcePath),
+      newSmartFormImport: importPath(
+        detectedLayout,
+        newPagePath,
+        smartFormPath,
+      ),
+      newAuthImport: hasPasswordField
+        ? importPath(detectedLayout, newPagePath, authPath)
+        : undefined,
+      editPrismaImport: importPath(detectedLayout, editPagePath, prismaPath),
+      editResourceImport: importPath(
+        detectedLayout,
+        editPagePath,
+        resourcePath,
+      ),
+      editSmartFormImport: importPath(
+        detectedLayout,
+        editPagePath,
+        smartFormPath,
+      ),
+      editAuthImport: hasPasswordField
+        ? importPath(detectedLayout, editPagePath, authPath)
+        : undefined,
+      searchable: configObject.list.searchable,
+      sortable: configObject.list.sortable,
+      columns: configObject.list.columns,
+      relations: modelRelations,
+      createFields: fieldsForUI.map(
+        (field) =>
+          `${field.name}: ${formValueFor(
+            field,
+            `Prisma.${model.name}UncheckedCreateInput`,
+            "create",
+          )}`,
+      ),
+      editFields: fieldsForUI.map(
+        (field) =>
+          `${field.name}: ${formValueFor(
+            field,
+            `Prisma.${model.name}UncheckedUpdateInput`,
+            "edit",
+          )}`,
+      ),
+      jsonFields: fieldsForUI
+        .filter((field) => baseType(field.type) === "Json")
+        .map((field) => field.name),
+    });
 
-    // registry.ts
-    const existingResourceFiles = (await fs.pathExists(genDir))
-      ? (await fs.readdir(genDir)).filter((file) =>
-          file.endsWith("Resource.ts"),
-        )
-      : [];
-    const selectedResourceFiles = pageModels.map(
-      (selectedModel) => `${selectedModel.name}Resource.ts`,
+    await writeGeneratedFile(
+      listPagePath,
+      generatedRuntime.listPage || listPage,
     );
-    const resourceFiles = [
-      ...new Set([...existingResourceFiles, ...selectedResourceFiles]),
-    ];
-    const registryPath = path.join(outDir, "registry.ts");
-    const overridesPath = path.join(outDir, "overrides.ts");
+    await writeGeneratedFile(newPagePath, generatedRuntime.newPage || newPage);
+    await writeGeneratedFile(
+      editPagePath,
+      generatedRuntime.editPage || editPage,
+    );
+  }
 
-    const registryImports = resourceFiles
-      .map((f) => {
-        const n = f.replace("Resource.ts", "");
-        return `import { ${n}Resource } from "${importPath(
-          detectedLayout,
-          registryPath,
-          path.join(genDir, f),
-        )}";`;
-      })
-      .join("\n");
+  // registry.ts
+  const existingResourceFiles = (await fs.pathExists(genDir))
+    ? (await fs.readdir(genDir)).filter((file) => file.endsWith("Resource.ts"))
+    : [];
+  const selectedResourceFiles = pageModels.map(
+    (selectedModel) => `${selectedModel.name}Resource.ts`,
+  );
+  const resourceFiles = [
+    ...new Set([...existingResourceFiles, ...selectedResourceFiles]),
+  ];
+  const registryPath = path.join(outDir, "registry.ts");
+  const overridesPath = path.join(outDir, "overrides.ts");
 
-    const registryArray = resourceFiles
-      .map((f) => f.replace("Resource.ts", "Resource"))
-      .join(",\n  ");
+  const registryImports = resourceFiles
+    .map((f) => {
+      const n = f.replace("Resource.ts", "");
+      return `import { ${n}Resource } from "${importPath(
+        detectedLayout,
+        registryPath,
+        path.join(genDir, f),
+      )}";`;
+    })
+    .join("\n");
 
-    const registryText = `
+  const registryArray = resourceFiles
+    .map((f) => f.replace("Resource.ts", "Resource"))
+    .join(",\n  ");
+
+  const registryText = `
       // ${GENERATED_REGISTRY_MARKER}
       import { overrides, mergeResource } from "${importPath(
         detectedLayout,
@@ -714,29 +912,24 @@ ${fieldsForUI
       });
     `;
 
-    await writeGeneratedFile(
+  await writeGeneratedFile(registryPath, registryText, {
+    allowUpdate: true,
+    isSafeToUpdate: isSwitchboardRegistry,
+  });
+
+  // Generate /admin layout + index that use the registry
+  if (options.pages) {
+    const adminRoot = path.join(appDir, "admin");
+    const layoutPath = path.join(adminRoot, "layout.tsx");
+    const indexPath = path.join(adminRoot, "page.tsx");
+
+    const layout = adminLayoutTemplate(
+      detectedLayout,
+      layoutPath,
       registryPath,
-      registryText,
-      {
-        allowUpdate: true,
-        isSafeToUpdate: isSwitchboardRegistry,
-      },
     );
 
-    // Generate /admin layout + index that use the registry
-    if (options.pages) {
-      const adminRoot = path.join(appDir, "admin");
-      const layoutPath = path.join(adminRoot, "layout.tsx");
-      const indexPath = path.join(adminRoot, "page.tsx");
-
-      const layout = adminLayoutTemplate(
-        detectedLayout,
-        layoutPath,
-        registryPath,
-      );
-
-
-      const index = `
+    const index = `
         // ${GENERATED_FILE_MARKER}
         import Link from "next/link";
         import { resources } from "${importPath(detectedLayout, indexPath, registryPath)}";
@@ -768,9 +961,9 @@ ${fieldsForUI
         }
       `;
 
-      await writeGeneratedFile(layoutPath, layout);
-      await writeGeneratedFile(indexPath, index);
-    }
+    await writeGeneratedFile(layoutPath, layout);
+    await writeGeneratedFile(indexPath, index);
+  }
 
-    return { layout: detectedLayout, results };
+  return { layout: detectedLayout, results };
 }

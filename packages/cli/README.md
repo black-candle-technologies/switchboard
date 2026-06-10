@@ -153,7 +153,9 @@ src/
 |   `-- overrides.ts
 |-- middleware.ts
 |-- components/
-|   |-- form/SmartForm.tsx
+|   |-- form/
+|   |   |-- SmartForm.tsx
+|   |   `-- DeleteButton.tsx
 |   `-- table/SimpleTable.tsx
 `-- app/
     `-- admin/
@@ -222,6 +224,31 @@ outside the detected locations. Invalid overrides report the missing path.
 
 Models used with `--pages` must have one explicit `String`, `Int`, or `BigInt`
 primary key. Compound IDs are rejected with an actionable error.
+
+## Supported Generated Fields
+
+| Prisma field | Form behavior | List behavior |
+| --- | --- | --- |
+| `String` | Text, email, password, or textarea heuristic | Text; searchable |
+| `Int`, `Float`, `Decimal`, `BigInt` | Number input | Scalar value |
+| `Boolean` | Checkbox; optional values use Yes/No/Not set | Yes/No |
+| Enum | Select | Enum value |
+| `DateTime` | `datetime-local` | Localized date and time |
+| `Json` | JSON textarea | Compact JSON |
+| Optional scalar | Blank becomes `null` | `Not set` for null |
+
+Fields with Prisma defaults may be left blank so Prisma can apply the default.
+Common Prisma create, update, and delete errors are shown in the generated UI,
+and failed submissions stay on the form.
+
+Scalar foreign keys declared through
+`@relation(fields: [...], references: [...])` become selects. The referenced
+field is the option value. Switchboard prefers `name`, `title`, `label`,
+`email`, or `username` for labels and also uses that label in list pages.
+
+This phase does not generate nested relation writes, many-to-many editors,
+scalar-list controls, compound-ID routes, relation autocomplete, or a `Bytes`
+upload control.
 
 ## Links
 

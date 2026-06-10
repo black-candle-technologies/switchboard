@@ -5,24 +5,78 @@ import { redirect } from "next/navigation";
 import { SmartForm } from "@/components/form/SmartForm";
 import { PostResource } from "@/switchboard/generated/PostResource";
 
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
-export default function NewPostPage() {
-  async function create(formData: FormData) {
+function actionErrorMessage(error: unknown, operation: "save" | "delete") {
+  console.error(`Switchboard failed to ${operation} Post:`, error);
+  if (error instanceof SyntaxError) {
+    return "A JSON field contains invalid JSON.";
+  }
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === "P2002") {
+      return "A record with that unique value already exists.";
+    }
+    if (error.code === "P2003") {
+      return operation === "delete"
+        ? "This record cannot be deleted because other records still reference it."
+        : "A selected related record no longer exists.";
+    }
+    if (error.code === "P2025") return "This record no longer exists.";
+  }
+  return operation === "delete"
+    ? "The record could not be deleted."
+    : "The record could not be saved. Check the values and try again.";
+}
+
+export default async function NewPostPage() {
+  const [authorRecords] = await Promise.all([
+    prisma.user.findMany({
+      select: {
+        id: true,
+        name: true,
+      },
+      orderBy: { name: "asc" },
+    }),
+  ]);
+  const relationOptions = {
+    authorId: authorRecords.map((record) => ({
+      value: String(record.id),
+      label: String(record.name ?? record.id),
+    })),
+  };
+
+  async function create(
+    _previousState: { error?: string },
+    formData: FormData,
+  ) {
     "use server";
-    const data: Prisma.PostUncheckedCreateInput = {
-      title: String(formData.get("title") ?? ""),
-      content: formData.get("content")
-        ? String(formData.get("content") ?? "")
-        : null,
-      status: formData.get("status")
-        ? (String(
-            formData.get("status") ?? "",
-          ) as Prisma.PostUncheckedCreateInput["status"])
-        : undefined,
-      authorId: String(formData.get("authorId") ?? ""),
-    };
-    await prisma.post.create({ data });
+    try {
+      const data: Prisma.PostUncheckedCreateInput = {
+        title: String(formData.get("title") ?? ""),
+        content: formData.get("content")
+          ? String(formData.get("content") ?? "")
+          : null,
+        status: formData.get("status")
+          ? (String(
+              formData.get("status") ?? "",
+            ) as Prisma.PostUncheckedCreateInput["status"])
+          : undefined,
+        featured: String(formData.get("featured") ?? "") === "true",
+        viewCount: formData.get("viewCount")
+          ? Number(formData.get("viewCount"))
+          : undefined,
+        publishedAt: formData.get("publishedAt")
+          ? new Date(String(formData.get("publishedAt") ?? ""))
+          : null,
+        metadata: formData.get("metadata")
+          ? JSON.parse(String(formData.get("metadata") ?? ""))
+          : null,
+        authorId: String(formData.get("authorId") ?? ""),
+      };
+      await prisma.post.create({ data });
+    } catch (error) {
+      return { error: actionErrorMessage(error, "save") };
+    }
     revalidatePath("/admin/posts");
     redirect("/admin/posts");
   }
@@ -31,6 +85,7 @@ export default function NewPostPage() {
     <SmartForm
       title="New Post"
       fields={PostResource.fields}
+      relationOptions={relationOptions}
       submitLabel="Create"
       cancelHref="/admin/posts"
       action={create}

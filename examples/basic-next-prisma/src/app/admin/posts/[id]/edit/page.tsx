@@ -5,45 +5,104 @@ import { redirect } from "next/navigation";
 import { SmartForm } from "@/components/form/SmartForm";
 import { PostResource } from "@/switchboard/generated/PostResource";
 
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 type PageProps = { params: Promise<{ id: string }> };
+
+function actionErrorMessage(error: unknown, operation: "save" | "delete") {
+  console.error(`Switchboard failed to ${operation} Post:`, error);
+  if (error instanceof SyntaxError) {
+    return "A JSON field contains invalid JSON.";
+  }
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === "P2002") {
+      return "A record with that unique value already exists.";
+    }
+    if (error.code === "P2003") {
+      return operation === "delete"
+        ? "This record cannot be deleted because other records still reference it."
+        : "A selected related record no longer exists.";
+    }
+    if (error.code === "P2025") return "This record no longer exists.";
+  }
+  return operation === "delete"
+    ? "The record could not be deleted."
+    : "The record could not be saved. Check the values and try again.";
+}
 
 export default async function EditPostPage({ params }: PageProps) {
   const routeParams = await params;
   const id = routeParams.id;
-  const existing = await prisma.post.findUnique({
-    where: { id: id },
-  });
-  if (!existing)
+  const [existing, authorRecords] = await Promise.all([
+    prisma.post.findUnique({ where: { id: id } }),
+    prisma.user.findMany({
+      select: {
+        id: true,
+        name: true,
+      },
+      orderBy: { name: "asc" },
+    }),
+  ]);
+  if (!existing) {
     return <div className="sb-card sb-empty-state">Record not found.</div>;
+  }
+  const relationOptions = {
+    authorId: authorRecords.map((record) => ({
+      value: String(record.id),
+      label: String(record.name ?? record.id),
+    })),
+  };
 
-  async function update(formData: FormData) {
+  async function update(
+    _previousState: { error?: string },
+    formData: FormData,
+  ) {
     "use server";
-    const data: Prisma.PostUncheckedUpdateInput = {
-      title: String(formData.get("title") ?? ""),
-      content: formData.get("content")
-        ? String(formData.get("content") ?? "")
-        : null,
-      status: formData.get("status")
-        ? (String(
-            formData.get("status") ?? "",
-          ) as Prisma.PostUncheckedUpdateInput["status"])
-        : undefined,
-      authorId: String(formData.get("authorId") ?? ""),
-    };
-    await prisma.post.update({
-      where: { id: id },
-      data,
-    });
+    try {
+      const data: Prisma.PostUncheckedUpdateInput = {
+        title: String(formData.get("title") ?? ""),
+        content: formData.get("content")
+          ? String(formData.get("content") ?? "")
+          : null,
+        status: formData.get("status")
+          ? (String(
+              formData.get("status") ?? "",
+            ) as Prisma.PostUncheckedUpdateInput["status"])
+          : undefined,
+        featured: String(formData.get("featured") ?? "") === "true",
+        viewCount: formData.get("viewCount")
+          ? Number(formData.get("viewCount"))
+          : undefined,
+        publishedAt: formData.get("publishedAt")
+          ? new Date(String(formData.get("publishedAt") ?? ""))
+          : null,
+        metadata: formData.get("metadata")
+          ? JSON.parse(String(formData.get("metadata") ?? ""))
+          : null,
+        authorId: String(formData.get("authorId") ?? ""),
+      };
+      await prisma.post.update({
+        where: { id: id },
+        data,
+      });
+    } catch (error) {
+      return { error: actionErrorMessage(error, "save") };
+    }
     revalidatePath("/admin/posts");
     redirect("/admin/posts");
   }
 
+  const jsonFields = new Set<string>(["metadata"]);
   const initialValues = Object.fromEntries(
     Object.entries(existing).map(([key, value]) => [
       key,
-      value instanceof Date ? value.toISOString().slice(0, 16) : value,
+      value instanceof Date
+        ? value.toISOString().slice(0, 16)
+        : typeof value === "bigint"
+          ? String(value)
+          : jsonFields.has(key) && value !== null
+            ? JSON.stringify(value, null, 2)
+            : value,
     ]),
   );
 
@@ -52,6 +111,7 @@ export default async function EditPostPage({ params }: PageProps) {
       title="Edit Post"
       fields={PostResource.fields}
       initialValues={initialValues}
+      relationOptions={relationOptions}
       submitLabel="Save"
       cancelHref="/admin/posts"
       action={update}

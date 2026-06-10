@@ -26,9 +26,9 @@ const stripAnsi = (value) => value.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
 
 afterEach(async () => {
   await Promise.all(
-    tempProjects.splice(0).map((projectRoot) =>
-      rm(projectRoot, { recursive: true, force: true }),
-    ),
+    tempProjects
+      .splice(0)
+      .map((projectRoot) => rm(projectRoot, { recursive: true, force: true })),
   );
 });
 
@@ -120,11 +120,12 @@ test("generates separate User list, create, and edit routes", async () => {
   assert.match(listPage, /className="sb-empty-state"/);
   assert.match(listPage, /className="sb-pagination"/);
 
-  assert.match(newPage, /export default function NewUserPage/);
-  assert.match(newPage, /async function create\(formData: FormData\)/);
+  assert.match(newPage, /export default async function NewUserPage/);
+  assert.match(newPage, /async function create\([\s\S]*formData: FormData/);
   assert.match(newPage, /Prisma\.UserUncheckedCreateInput/);
   assert.match(newPage, /await prisma\.user\.create\(\{ data \}\)/);
   assert.match(newPage, /passwordHash: await hashPassword/);
+  assert.match(newPage, /actionErrorMessage\(error, "save"\)/);
   assert.match(newPage, /<SmartForm/);
   assert.match(newPage, /submitLabel="Create"/);
   assert.doesNotMatch(newPage, /UserListPage/);
@@ -138,11 +139,12 @@ test("generates separate User list, create, and edit routes", async () => {
   assert.match(editPage, /Prisma\.UserUncheckedUpdateInput/);
   assert.match(editPage, /await hashPassword/);
   assert.match(editPage, /\["password", "passwordHash"\]\.includes\(key\)/);
+  assert.match(editPage, /new Set<string>\(\[\]\)/);
   assert.match(editPage, /await prisma\.user\.update/);
   assert.doesNotMatch(editPage, /UserListPage|searchParams|findMany/);
 });
 
-test("generates enum fields and related-model routes without a database", async () => {
+test("generates typed form widgets and relation selects without a database", async () => {
   const projectRoot = await generateFixture();
 
   const userResource = await readGenerated(
@@ -161,20 +163,63 @@ test("generates enum fields and related-model routes without a database", async 
     "new",
     "page.tsx",
   );
+  const postListPage = await readGenerated(
+    projectRoot,
+    "src",
+    "app",
+    "admin",
+    "posts",
+    "page.tsx",
+  );
+  const postResource = await readGenerated(
+    projectRoot,
+    "src",
+    "switchboard",
+    "generated",
+    "PostResource.ts",
+  );
 
   assert.match(userResource, /"ADMIN"/);
   assert.match(userResource, /"USER"/);
   assert.match(userResource, /type: "password"/);
-  assert.doesNotMatch(
-    userResource,
-    /columns:\s*\[[\s\S]*key: "passwordHash"/,
-  );
+  assert.doesNotMatch(userResource, /columns:\s*\[[\s\S]*key: "passwordHash"/);
   assert.doesNotMatch(userResource, /name: "posts"/);
 
-  assert.match(postNewPage, /export default function NewPostPage/);
+  assert.match(postResource, /name: "content"[\s\S]*required: false/);
+  assert.match(postResource, /name: "status"[\s\S]*type: "select"/);
+  assert.match(postResource, /name: "featured"[\s\S]*type: "checkbox"/);
+  assert.match(postResource, /name: "viewCount"[\s\S]*type: "number"/);
+  assert.match(postResource, /name: "publishedAt"[\s\S]*type: "datetime"/);
+  assert.match(postResource, /name: "metadata"[\s\S]*type: "json"/);
+  assert.match(
+    postResource,
+    /name: "authorId"[\s\S]*type: "relation"[\s\S]*model: "User"/,
+  );
+
+  assert.match(postNewPage, /export default async function NewPostPage/);
   assert.match(postNewPage, /authorId: String\(formData\.get\("authorId"\)/);
+  assert.match(postNewPage, /prisma\.user\.findMany/);
+  assert.match(postNewPage, /relationOptions=\{relationOptions\}/);
+  assert.match(
+    postNewPage,
+    /featured: String\(formData\.get\("featured"\)[\s\S]*=== "true"/,
+  );
+  assert.match(postNewPage, /viewCount: formData\.get\("viewCount"\)/);
+  assert.match(postNewPage, /publishedAt: formData\.get\("publishedAt"\)/);
+  assert.match(postNewPage, /JSON\.parse/);
   assert.match(postNewPage, /await prisma\.post\.create\(\{ data \}\)/);
-  assert.doesNotMatch(postNewPage, /PostListPage|searchParams|findMany/);
+  assert.doesNotMatch(postNewPage, /PostListPage|searchParams/);
+
+  assert.match(postListPage, /include: relationInclude/);
+  assert.match(postListPage, /relationLabelKey: "name"/);
+  assert.match(
+    postListPage,
+    /No post records yet\. Create one to get started\./,
+  );
+  assert.match(postListPage, /<DeleteButton/);
+  assert.match(postListPage, /actionErrorMessage\(error, "delete"\)/);
+  assert.match(postListPage, /Math\.min\(safeRequestedPage, totalPages\)/);
+  assert.match(postListPage, /supportedSortFields/);
 });
 
 test("supports mapped fields, defaults, optional scalars, lists, relations, and custom IDs", async () => {
@@ -214,6 +259,22 @@ test("supports mapped fields, defaults, optional scalars, lists, relations, and 
     "edit",
     "page.tsx",
   );
+  const postResource = await readGenerated(
+    projectRoot,
+    "src",
+    "switchboard",
+    "generated",
+    "PostResource.ts",
+  );
+  const postNewPage = await readGenerated(
+    projectRoot,
+    "src",
+    "app",
+    "admin",
+    "posts",
+    "new",
+    "page.tsx",
+  );
 
   assert.match(accountResource, /name: "slug"/);
   assert.match(accountResource, /name: "nickname"/);
@@ -224,11 +285,11 @@ test("supports mapped fields, defaults, optional scalars, lists, relations, and 
   assert.doesNotMatch(accountResource, /name: "posts"/);
   assert.doesNotMatch(accountResource, /@map|@@map/);
 
-  assert.match(accountListPage, /defaultSortKey = ""/);
-  assert.match(accountListPage, /: undefined\)/);
+  assert.match(accountListPage, /const defaultSortKey =/);
+  assert.match(accountListPage, /: undefined\) as/);
   assert.doesNotMatch(accountListPage, /createdAt/);
-  assert.match(accountListPage, /\.slug\)/);
-  assert.match(accountListPage, /name="slug"/);
+  assert.match(accountListPage, /values\.slug/);
+  assert.match(accountListPage, /supportedSearchFields/);
 
   assert.match(accountNewPage, /slug: String\(formData\.get\("slug"\)/);
   assert.match(
@@ -240,6 +301,13 @@ test("supports mapped fields, defaults, optional scalars, lists, relations, and 
 
   assert.match(accountEditPage, /where: \{ slug: id \}/);
   assert.match(accountEditPage, /const id = routeParams\.id/);
+
+  assert.match(
+    postResource,
+    /name: "accountSlug"[\s\S]*type: "relation"[\s\S]*valueKey: "slug"/,
+  );
+  assert.match(postNewPage, /prisma\.account\.findMany/);
+  assert.match(postNewPage, /accountSlug: accountRecords\.map/);
 });
 
 test("rejects compound IDs before generating admin pages", async () => {
@@ -420,9 +488,7 @@ test("CLI supports root app projects without a src directory", async () => {
     { cwd: projectRoot },
   );
 
-  await access(
-    path.join(projectRoot, "app", "admin", "users", "page.tsx"),
-  );
+  await access(path.join(projectRoot, "app", "admin", "users", "page.tsx"));
   await access(
     path.join(projectRoot, "switchboard", "generated", "UserResource.ts"),
   );
@@ -443,10 +509,7 @@ test("generate --dry-run reports planned actions and writes nothing", async () =
     stdout,
     /Would create src\/switchboard\/generated\/UserResource\.ts/,
   );
-  assert.match(
-    stdout,
-    /Would create src\/app\/admin\/users\/page\.tsx/,
-  );
+  assert.match(stdout, /Would create src\/app\/admin\/users\/page\.tsx/);
   await assert.rejects(
     access(
       path.join(
@@ -459,9 +522,7 @@ test("generate --dry-run reports planned actions and writes nothing", async () =
     ),
   );
   await assert.rejects(
-    access(
-      path.join(projectRoot, "src", "app", "admin", "users", "page.tsx"),
-    ),
+    access(path.join(projectRoot, "src", "app", "admin", "users", "page.tsx")),
   );
 });
 
@@ -551,10 +612,7 @@ test("generate protects existing resource and page files unless forced", async (
     forcedRun.stdout,
     /Overwrote src\/switchboard\/generated\/UserResource\.ts/,
   );
-  assert.match(
-    forcedRun.stdout,
-    /Overwrote src\/app\/admin\/users\/page\.tsx/,
-  );
+  assert.match(forcedRun.stdout, /Overwrote src\/app\/admin\/users\/page\.tsx/);
 });
 
 test("generate updates a recognized registry but protects an ambiguous one", async () => {
@@ -634,10 +692,7 @@ test("generate protects custom admin shell files unless forced", async () => {
     await readFile(indexPath, "utf8"),
     /Generated by Switchboard\. You may edit this file\./,
   );
-  assert.match(
-    forcedRun.stdout,
-    /Overwrote src\/app\/admin\/layout\.tsx/,
-  );
+  assert.match(forcedRun.stdout, /Overwrote src\/app\/admin\/layout\.tsx/);
   assert.match(forcedRun.stdout, /Overwrote src\/app\/admin\/page\.tsx/);
 });
 
@@ -658,7 +713,10 @@ test("generate does not create environment or database files", async () => {
   }
   await collect(projectRoot);
 
-  assert.equal(files.some((file) => path.basename(file) === ".env"), false);
+  assert.equal(
+    files.some((file) => path.basename(file) === ".env"),
+    false,
+  );
   assert.equal(
     files.some((file) => /\.(?:db|sqlite|sqlite3)$/.test(file)),
     false,
