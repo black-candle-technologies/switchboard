@@ -43,10 +43,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# prisma / local database
-src/prisma/dev.db
-src/prisma/dev.db-journal
-/prisma/migrations/
+# prisma / local databases
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
 
 # generated code
 /src/generated/prisma

@@ -5,9 +5,6 @@ export type UserShape = {
   name: string;
   email: string;
   role: "ADMIN" | "MANAGER" | "USER";
-  posts: unknown[];
-  projects: unknown[];
-  tasks: unknown[];
 };
 
 export const UserResource: ResourceConfig<UserShape> = {
@@ -52,30 +49,6 @@ export const UserResource: ResourceConfig<UserShape> = {
         ],
       },
     },
-    {
-      name: "posts",
-      label: "Posts",
-      required: true,
-      widget: {
-        type: "text",
-      },
-    },
-    {
-      name: "projects",
-      label: "Projects",
-      required: true,
-      widget: {
-        type: "text",
-      },
-    },
-    {
-      name: "tasks",
-      label: "Tasks",
-      required: true,
-      widget: {
-        type: "text",
-      },
-    },
   ],
   list: {
     perPage: 20,
@@ -92,18 +65,6 @@ export const UserResource: ResourceConfig<UserShape> = {
       {
         key: "role",
         header: "Role",
-      },
-      {
-        key: "posts",
-        header: "Posts",
-      },
-      {
-        key: "projects",
-        header: "Projects",
-      },
-      {
-        key: "tasks",
-        header: "Tasks",
       },
     ],
     defaultSort: {

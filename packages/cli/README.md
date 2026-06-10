@@ -1,99 +1,88 @@
 # @lanebucher/switchboard
 
+Version 0.4.2
 
-**Version:** 0.4.0
-**Author:** Lane Bucher
-**Contact:** lane.bucher15@gmail.com
-**License:** MIT License
+Switchboard generates Prisma-backed resource configuration and optional
+Next.js App Router admin pages.
 
+## Requirements
 
----
-
-
-## Overview
-Switchboard is an open-source developer toolkit that automatically generates a complete, fully customizable admin dashboard for your **Next.js + Prisma** application. It is designed to save time during early-stage development by transforming your existing Prisma schema into an interactive, type-safe admin panel in seconds.
-
-
-Unlike Prisma Studio, Switchboard is focused on **extensibility and design freedom**. It generates actual Next.js pages and React components, which can be modified, extended, or themed as needed. You retain complete control over the resulting code.
-
-
----
-
-
-## Features
-- Instant generation of CRUD admin pages for all Prisma models.
-- Full integration with Next.js App Router and TypeScript.
-- Automatically detects model relationships, enums, and validation.
-- Supports pagination, sorting, and filtering out of the box.
-- Generates strongly typed resource configs for each model.
-- Produces editable pages that can be extended like any other component.
-- CLI-based generation workflow for repeatable use in production apps.
-
-
----
-
+- Node.js 18 or newer
+- A Next.js and Prisma project using TypeScript
+- A Prisma schema at `src/prisma/schema.prisma`
 
 ## Installation
-To install the CLI:
-
 
 ```bash
-npm install -D @lanebucher/switchboard
+npm install --save-dev @lanebucher/switchboard
 ```
-
-
----
-
 
 ## Usage
-Switchboard assumes your Prisma schema is located at `src/prisma/schema.prisma`.
 
-
-Run the CLI from your Next.js project root:
-
+Run the CLI from the target project's root:
 
 ```bash
-switchboard generate --pages
+npx switchboard generate --pages
 ```
 
+Generate only one model:
 
-### Options
-| Flag | Description |
-|------|--------------|
-| `--pages` | Generates full Next.js admin pages in addition to resource configs. |
-| `--model <ModelName>` | Generate code for a specific Prisma model only. |
-
-
-Example:
 ```bash
-switchboard generate --model User --pages
+npx switchboard generate --model User --pages
 ```
 
+| Option | Description |
+| --- | --- |
+| `-m, --model <modelName>` | Generate only the named Prisma model. |
+| `--pages` | Also generate Next.js admin routes. |
 
----
+Without `--pages`, the CLI generates resource configs and updates the resource
+registry.
 
+## Generated Files
 
-## Output Structure
-After running `switchboard generate --pages`, Switchboard will produce the following:
-
-
-```
+```text
 src/
-prisma/
-schema.prisma
-switchboard/
-generated/
-UserResource.ts
-PostResource.ts
-...
-registry.ts
-app/
-admin/
-users/
-page.tsx
-new/page.tsx
-[id]/edit/page.tsx
-layout.tsx
+|-- switchboard/
+|   |-- generated/
+|   |   |-- UserResource.ts
+|   |   `-- PostResource.ts
+|   `-- registry.ts
+`-- app/
+    `-- admin/
+        |-- layout.tsx
+        |-- page.tsx
+        `-- users/
+            |-- page.tsx
+            |-- new/
+            |   `-- page.tsx
+            `-- [id]/
+                `-- edit/
+                    `-- page.tsx
 ```
 
-## For questions, feature requests, or contributions, please open an issue on GitHub or reach out directly via email.
+The `src/app/admin` files are generated only with `--pages`.
+`src/app/admin/layout.tsx` is preserved when it already exists; the other
+listed generated files are overwritten.
+
+The generated code expects the target project to provide compatible modules at
+these import paths:
+
+- `@/lib/prisma`
+- `@/components/form/SmartForm`
+- `@/components/table/SimpleTable`
+- `@/switchboard/types`
+- `@/switchboard/overrides`
+
+The package currently generates source files only; it does not install those
+host-project modules or their dependencies.
+
+## Links
+
+- [Repository](https://github.com/black-candle-technologies/switchboard)
+- [Issues](https://github.com/black-candle-technologies/switchboard/issues)
+- [npm](https://www.npmjs.com/package/@lanebucher/switchboard)
+
+## License
+
+MIT

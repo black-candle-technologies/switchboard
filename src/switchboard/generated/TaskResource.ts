@@ -3,12 +3,10 @@ import type { ResourceConfig } from "@/switchboard/types";
 
 export type TaskShape = {
   projectId: string;
-  project: unknown;
   title: string;
   dueDate?: string;
   done: boolean;
   assigneeId?: string;
-  assignee?: unknown;
 };
 
 export const TaskResource: ResourceConfig<TaskShape> = {
@@ -22,14 +20,6 @@ export const TaskResource: ResourceConfig<TaskShape> = {
       widget: {
         type: "relation",
         model: "Project",
-      },
-    },
-    {
-      name: "project",
-      label: "Project",
-      required: true,
-      widget: {
-        type: "text",
       },
     },
     {
@@ -64,14 +54,6 @@ export const TaskResource: ResourceConfig<TaskShape> = {
         type: "text",
       },
     },
-    {
-      name: "assignee",
-      label: "Assignee",
-      required: false,
-      widget: {
-        type: "text",
-      },
-    },
   ],
   list: {
     perPage: 20,
@@ -80,10 +62,6 @@ export const TaskResource: ResourceConfig<TaskShape> = {
       {
         key: "projectId",
         header: "ProjectId",
-      },
-      {
-        key: "project",
-        header: "Project",
       },
       {
         key: "title",
@@ -102,10 +80,6 @@ export const TaskResource: ResourceConfig<TaskShape> = {
       {
         key: "assigneeId",
         header: "AssigneeId",
-      },
-      {
-        key: "assignee",
-        header: "Assignee",
       },
     ],
     defaultSort: {

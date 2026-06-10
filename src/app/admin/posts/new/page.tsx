@@ -1,34 +1,25 @@
 import { prisma } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { SmartForm } from "@/components/form/SmartForm";
 import { PostResource } from "@/switchboard/generated/PostResource";
-import type { Prisma, PostStatus } from "@prisma/client";
-
-function str(v: FormDataEntryValue | null, fallback = ""): string {
-  return typeof v === "string" ? v : fallback;
-}
+import type { Prisma } from "@prisma/client";
 
 export default function NewPostPage() {
   async function create(formData: FormData) {
     "use server";
-
-    const title = str(formData.get("title"));
-    const content = str(formData.get("content")) || undefined;
-    const statusStr = (str(formData.get("status")) || "DRAFT") as PostStatus;
-    const authorId = str(formData.get("authorId"));
-
-    if (!title) throw new Error("Title is required.");
-    if (!authorId) throw new Error("authorId is required.");
-
-    // Use Unchecked input to set the FK directly (no nested author object)
     const data: Prisma.PostUncheckedCreateInput = {
-      title,
-      content,
-      status: statusStr,
-      authorId, // required FK
+      title: String(formData.get("title") ?? ""),
+      content: formData.get("content")
+        ? String(formData.get("content") ?? "")
+        : null,
+      status: String(
+        formData.get("status") ?? "",
+      ) as Prisma.PostUncheckedCreateInput["status"],
+      authorId: String(formData.get("authorId") ?? ""),
     };
-
     await prisma.post.create({ data });
+    revalidatePath("/admin/posts");
     redirect("/admin/posts");
   }
 

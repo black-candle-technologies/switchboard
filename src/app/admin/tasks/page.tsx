@@ -3,112 +3,121 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { TaskResource } from "@/switchboard/generated/TaskResource";
 import type { Column } from "@/components/table/SimpleTable";
-import type { Task } from "@prisma/client";
-import type { Prisma } from "@prisma/client";
+import type { Task, Prisma } from "@prisma/client";
 
-type PageProps = {
-  searchParams?: Record<string, string | string[] | undefined>;
-};
-
-const getStr = (v: string | string[] | undefined, fallback = ""): string =>
-  typeof v === "string" ? v : fallback;
+type SearchParams = Record<string, string | string[] | undefined>;
+type PageProps = { searchParams: Promise<SearchParams> };
 
 export default async function TaskListPage({ searchParams }: PageProps) {
-  // --- query params (typed)
-  const q = getStr(searchParams?.q, "").trim();
-  const page = Number(getStr(searchParams?.page, "1")) || 1;
-
+  const params = await searchParams;
+  const q = typeof params.q === "string" ? params.q.trim() : "";
+  const page = Number(params.page ?? 1) || 1;
   const take = TaskResource.list?.perPage ?? 20;
   const skip = (page - 1) * take;
 
-  // --- sorting
-  const defaultSort = { key: "createdAt", dir: "desc" as const };
-  const sortKey = getStr(searchParams?.sort, defaultSort.key);
-  const sortDir = (getStr(searchParams?.dir, defaultSort.dir) === "asc"
-    ? "asc"
-    : "desc") as "asc" | "desc";
+  // Sorting
+  const defaultSortKey = "createdAt";
+  const defaultSortDir: "asc" | "desc" = "desc";
+  const sortKey =
+    typeof params.sort === "string" ? params.sort : defaultSortKey;
+  const sortDir =
+    params.dir === "asc" || params.dir === "desc" ? params.dir : defaultSortDir;
+  const orderBy = (
+    sortKey ? { [sortKey]: sortDir } : { createdAt: "desc" }
+  ) as Prisma.TaskOrderByWithRelationInput;
 
-  // explicit orderBy
-  const orderBy: Prisma.TaskOrderByWithRelationInput = sortKey
-    ? ({ [sortKey]: sortDir } as Prisma.TaskOrderByWithRelationInput)
-    : { createdAt: "desc" };
+  // Search
+  const searchable = TaskResource.list?.searchable ?? [];
+  const where = (
+    q && searchable.length
+      ? { OR: searchable.map((field) => ({ [field]: { contains: q } })) }
+      : {}
+  ) as Prisma.TaskWhereInput;
 
-  // --- safe search (string fields only)
-  // Adjust fields to match your Task model (title is string; projectId is string in your seed).
-  const where: Prisma.TaskWhereInput =
-    q.length > 0
-      ? {
-          OR: [
-            { title:     { contains: q } },
-            { projectId: { contains: q } },
-          ],
-        }
-      : {};
-
-    const placeholderFields =
-      (TaskResource.list?.searchable?.filter((k) =>
-        // keep only string columns that really exist on Task
-        ["title", "projectId"].includes(k)
-      ) ?? ["title", "projectId"]) as string[];
-
-  // --- data
   const [items, total] = await Promise.all([
-    prisma.task.findMany({ where, orderBy, skip, take }),
+    prisma.task.findMany({
+      where,
+      orderBy,
+      skip,
+      take,
+    }),
     prisma.task.count({ where }),
   ]);
 
+  type GeneratedColumn = {
+    key: string;
+    header?: string;
+    format?: "datetime" | "date" | "boolean";
+  };
+  const generatedColumns = (TaskResource.list?.columns ?? [
+    {
+      key: "projectId",
+      header: "ProjectId",
+    },
+    {
+      key: "title",
+      header: "Title",
+    },
+    {
+      key: "dueDate",
+      header: "DueDate",
+    },
+    {
+      key: "done",
+      header: "Done",
+    },
+    {
+      key: "assigneeId",
+      header: "AssigneeId",
+    },
+  ]) as readonly GeneratedColumn[];
 
-  // columns (typed + safe)
-  type GenCol = { key: string; header?: string; format?: "datetime" | "date" | "boolean" };
-  const genCols: GenCol[] =
-    ((TaskResource.list?.columns as unknown) as GenCol[] | undefined) ?? [
-      { key: "title", header: "Title" },
-      { key: "projectId", header: "Project Id" },
-      { key: "status", header: "Status" },
-      { key: "createdAt", header: "Created", format: "datetime" },
-    ];
-
-  const baseColumns: Column<Task>[] = genCols.map((c) => ({
-    key: c.key as keyof Task,
-    header: c.header,
-  }));
-
-
-  // ✅ FIX: correct Map generic and construction
-  const fmtByKey = new Map<string, GenCol["format"]>();
-  for (const c of genCols) fmtByKey.set(c.key, c.format);
-
-  const columns: Column<Task>[] = baseColumns.map((c) => {
-    const fmt = fmtByKey.get(String(c.key));
-    if (fmt === "datetime") {
+  const columns: Column<Task>[] = generatedColumns.map((column) => {
+    const baseColumn: Column<Task> = {
+      key: column.key,
+      header: column.header,
+    };
+    if (column.format === "datetime") {
       return {
-        ...c,
-        cell: (row) => new Date(String((row as unknown as Record<string, unknown>)[String(c.key)])).toLocaleString(),
+        ...baseColumn,
+        cell: (row) =>
+          new Date(
+            String((row as unknown as Record<string, unknown>)[column.key]),
+          ).toLocaleString(),
       };
     }
-    if (fmt === "date") {
+    if (column.format === "date") {
       return {
-        ...c,
-        cell: (row) => new Date(String((row as unknown as Record<string, unknown>)[String(c.key)])).toLocaleDateString(),
+        ...baseColumn,
+        cell: (row) =>
+          new Date(
+            String((row as unknown as Record<string, unknown>)[column.key]),
+          ).toLocaleDateString(),
       };
     }
-    if (fmt === "boolean") {
+    if (column.format === "boolean") {
       return {
-        ...c,
-        cell: (row) => ((row as unknown as Record<string, unknown>)[String(c.key)] ? "Yes" : "No"),
+        ...baseColumn,
+        cell: (row) =>
+          (row as unknown as Record<string, unknown>)[column.key]
+            ? "Yes"
+            : "No",
       };
     }
-    return c;
+    return baseColumn;
   });
 
   async function del(formData: FormData) {
     "use server";
     const id = String(formData.get("id"));
-    await prisma.task.delete({ where: { id } });
+    await prisma.task.delete({
+      where: { id: id },
+    });
     revalidatePath("/admin/tasks");
   }
 
   const totalPages = Math.max(1, Math.ceil(total / take));
+
   const qs = (next: Record<string, string | number>) => {
     const p = new URLSearchParams();
     if (q) p.set("q", q);
@@ -120,17 +129,15 @@ export default async function TaskListPage({ searchParams }: PageProps) {
 
   const headerLink = (key: string, label?: string) => {
     const active = sortKey === key;
-    const nextDir: "asc" | "desc" = active && sortDir === "asc" ? "desc" : "asc";
-    const href = `/admin/tasks${qs({ page: 1, sort: key, dir: active ? nextDir : "asc" })}`;
+    const nextDir = active && sortDir === "asc" ? "desc" : "asc";
+    const base = `/admin/tasks${qs({ page: 1, sort: key, dir: active ? nextDir : "asc" })}`;
     return (
-      <a href={href} className="hover:underline">
+      <a href={base} className="hover:underline">
         {label ?? key}
         {active ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
       </a>
     );
   };
-
-  const getValue = (row: Task, key: string): unknown => (row as unknown as Record<string, unknown>)[key];
 
   return (
     <section className="space-y-4">
@@ -150,7 +157,9 @@ export default async function TaskListPage({ searchParams }: PageProps) {
           type="text"
           name="q"
           defaultValue={q}
-          placeholder={"Search " + placeholderFields.join(", ")}
+          placeholder={
+            "Search " + (TaskResource.list?.searchable ?? []).join(", ")
+          }
           className="w-72 rounded border px-3 py-2 text-sm"
         />
         <input type="hidden" name="sort" value={sortKey} />
@@ -169,24 +178,45 @@ export default async function TaskListPage({ searchParams }: PageProps) {
                   {headerLink(String(c.key), c.header)}
                 </th>
               ))}
-              <th className="px-3 py-2" />
+              <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
             {items.map((row) => (
-              <tr key={row.id} className="border-t">
+              <tr
+                key={String((row as unknown as Record<string, unknown>).id)}
+                className="border-t"
+              >
                 {columns.map((c) => (
                   <td key={String(c.key)} className="px-3 py-2">
-                    {c.cell ? c.cell(row) : String(getValue(row, String(c.key)) ?? "")}
+                    {c.cell
+                      ? c.cell(row)
+                      : String(
+                          (row as unknown as Record<string, unknown>)[c.key] ??
+                            "",
+                        )}
                   </td>
                 ))}
                 <td className="px-3 py-2">
                   <div className="flex gap-3">
-                    <Link className="underline" href={`/admin/tasks/${row.id}/edit`}>
+                    <Link
+                      className="underline"
+                      href={
+                        "/admin/tasks/" +
+                        String((row as unknown as Record<string, unknown>).id) +
+                        "/edit"
+                      }
+                    >
                       Edit
                     </Link>
                     <form action={del}>
-                      <input type="hidden" name="id" value={row.id} />
+                      <input
+                        type="hidden"
+                        name="id"
+                        value={String(
+                          (row as unknown as Record<string, unknown>).id,
+                        )}
+                      />
                       <button type="submit" className="text-red-600 underline">
                         Delete
                       </button>
@@ -197,7 +227,10 @@ export default async function TaskListPage({ searchParams }: PageProps) {
             ))}
             {items.length === 0 && (
               <tr>
-                <td className="px-3 py-6 text-center text-gray-500" colSpan={columns.length + 1}>
+                <td
+                  className="px-3 py-6 text-center text-gray-500"
+                  colSpan={columns.length + 1}
+                >
                   No records.
                 </td>
               </tr>

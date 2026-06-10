@@ -1,213 +1,37 @@
 import { prisma } from "@/lib/prisma";
-import Link from "next/link";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { SmartForm } from "@/components/form/SmartForm";
 import { ProjectResource } from "@/switchboard/generated/ProjectResource";
-import type { Column } from "@/components/table/SimpleTable";
-import type { Project } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
-type PageProps = {
-  searchParams?: Record<string, string | string[] | undefined>;
-};
-
-const getStr = (v: string | string[] | undefined, fallback = ""): string =>
-  typeof v === "string" ? v : fallback;
-
-export default async function ProjectListPage({ searchParams }: PageProps) {
-  // query
-  const q = getStr(searchParams?.q).trim();
-  const page = Number(getStr(searchParams?.page, "1")) || 1;
-  const take = ProjectResource.list?.perPage ?? 20;
-  const skip = (page - 1) * take;
-
-  // sort
-  const defaultSort = { key: "createdAt", dir: "desc" as const };
-  const sortKey = getStr(searchParams?.sort, defaultSort.key);
-  const sortDir = (getStr(searchParams?.dir, defaultSort.dir) === "asc" ? "asc" : "desc") as "asc" | "desc";
-  const orderBy: Record<string, "asc" | "desc"> = sortKey ? { [sortKey]: sortDir } : { createdAt: "desc" };
-
-  // search (only string fields)
-  const stringKeys: ReadonlyArray<keyof Project> = ["name", "description"];
-  const req = (ProjectResource.list?.searchable ?? []) as string[];
-  const searchFields = (req.length ? req : ["name", "description"]).filter(
-    (k): k is keyof Project => (stringKeys as readonly string[]).includes(k)
-  );
-
-  const where =
-    q && searchFields.length
-      ? {
-          OR: searchFields.map((k) => ({
-            [k]: { contains: q, mode: "insensitive" as const },
-          })),
-        }
-      : {};
-
-  const [items, total] = await Promise.all([
-    prisma.project.findMany({ where, orderBy, skip, take }),
-    prisma.project.count({ where }),
-  ]);
-
-  // columns
-  type GenCol = { key: string; header?: string; format?: "datetime" | "date" | "boolean" };
-  const genCols: GenCol[] =
-    ((ProjectResource.list?.columns as unknown) as GenCol[] | undefined) ?? [
-      { key: "name", header: "Name" },
-      { key: "description", header: "Description" },
-      { key: "createdAt", header: "Created", format: "datetime" },
-    ];
-
-  const baseColumns: Column<Project>[] = genCols
-    .filter((c) => c.key in ({} as Project))
-    .map((c) => ({ key: c.key as keyof Project, header: c.header }));
-
-  const fmtByKey = new Map<string, GenCol["format"]>();
-  for (const c of genCols) fmtByKey.set(c.key, c.format);
-
-  const columns: Column<Project>[] = baseColumns.map((c) => {
-    const fmt = fmtByKey.get(String(c.key));
-    if (fmt === "datetime") {
-      return {
-        ...c,
-        cell: (row) => new Date(String((row as unknown as Record<string, unknown>)[String(c.key)])).toLocaleString(),
-      };
-    }
-    if (fmt === "date") {
-      return {
-        ...c,
-        cell: (row) => new Date(String((row as unknown as Record<string, unknown>)[String(c.key)])).toLocaleDateString(),
-      };
-    }
-    if (fmt === "boolean") {
-      return {
-        ...c,
-        cell: (row) => ((row as unknown as Record<string, unknown>)[String(c.key)] ? "Yes" : "No"),
-      };
-    }
-    return c;
-  });
-
-  async function del(formData: FormData) {
+export default function NewProjectPage() {
+  async function create(formData: FormData) {
     "use server";
-    const id = String(formData.get("id"));
-    await prisma.project.delete({ where: { id } });
+    const data: Prisma.ProjectUncheckedCreateInput = {
+      name: String(formData.get("name") ?? ""),
+      description: formData.get("description")
+        ? String(formData.get("description") ?? "")
+        : null,
+      status: String(
+        formData.get("status") ?? "",
+      ) as Prisma.ProjectUncheckedCreateInput["status"],
+      ownerId: formData.get("ownerId")
+        ? String(formData.get("ownerId") ?? "")
+        : null,
+    };
+    await prisma.project.create({ data });
     revalidatePath("/admin/projects");
+    redirect("/admin/projects");
   }
 
-  const totalPages = Math.max(1, Math.ceil(total / take));
-  const qs = (next: Record<string, string | number>) => {
-    const p = new URLSearchParams();
-    if (q) p.set("q", q);
-    p.set("page", String(next.page ?? page));
-    p.set("sort", String(next.sort ?? sortKey));
-    p.set("dir", String(next.dir ?? sortDir));
-    return `?${p.toString()}`;
-  };
-
-  const headerLink = (key: string, label?: string) => {
-    const active = sortKey === key;
-    const nextDir: "asc" | "desc" = active && sortDir === "asc" ? "desc" : "asc";
-    const href = `/admin/projects${qs({ page: 1, sort: key, dir: active ? nextDir : "asc" })}`;
-    return (
-      <a href={href} className="hover:underline">
-        {label ?? key}
-        {active ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
-      </a>
-    );
-  };
-
-  const getValue = (row: Project, key: string): unknown => (row as unknown as Record<string, unknown>)[key];
-
   return (
-    <section className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Projects</h1>
-        <Link
-          href="/admin/projects/new"
-          className="rounded bg-black px-3 py-2 text-sm font-medium text-white hover:bg-gray-800"
-        >
-          + New
-        </Link>
-      </div>
-
-      <form method="get" className="flex gap-2">
-        <input
-          type="text"
-          name="q"
-          defaultValue={q}
-          placeholder={"Search " + (searchFields.length ? searchFields : ["name", "description"]).join(", ")}
-          className="w-72 rounded border px-3 py-2 text-sm"
-        />
-        <input type="hidden" name="sort" value={sortKey} />
-        <input type="hidden" name="dir" value={sortDir} />
-        <button className="rounded border px-3 py-2 text-sm" type="submit">
-          Search
-        </button>
-      </form>
-
-      <div className="overflow-x-auto rounded border bg-white">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-gray-100">
-            <tr>
-              {columns.map((c) => (
-                <th key={String(c.key)} className="px-3 py-2">
-                  {headerLink(String(c.key), c.header)}
-                </th>
-              ))}
-              <th className="px-3 py-2" />
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((row) => (
-              <tr key={row.id} className="border-t">
-                {columns.map((c) => (
-                  <td key={String(c.key)} className="px-3 py-2">
-                    {c.cell ? c.cell(row) : String(getValue(row, String(c.key)) ?? "")}
-                  </td>
-                ))}
-                <td className="px-3 py-2">
-                  <div className="flex gap-3">
-                    <Link className="underline" href={`/admin/projects/${row.id}/edit`}>
-                      Edit
-                    </Link>
-                    <form action={del}>
-                      <input type="hidden" name="id" value={row.id} />
-                      <button type="submit" className="text-red-600 underline">
-                        Delete
-                      </button>
-                    </form>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {items.length === 0 && (
-              <tr>
-                <td className="px-3 py-6 text-center text-gray-500" colSpan={columns.length + 1}>
-                  No records.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-gray-600">
-          Page {page} of {totalPages}
-        </span>
-        <div className="ml-auto flex gap-2">
-          <a
-            className={`rounded border px-3 py-1 text-sm ${page <= 1 ? "pointer-events-none opacity-50" : ""}`}
-            href={qs({ page: Math.max(1, page - 1) })}
-          >
-            Prev
-          </a>
-          <a
-            className={`rounded border px-3 py-1 text-sm ${page >= totalPages ? "pointer-events-none opacity-50" : ""}`}
-            href={qs({ page: Math.min(totalPages, page + 1) })}
-          >
-            Next
-          </a>
-        </div>
-      </div>
-    </section>
+    <SmartForm
+      title="New Project"
+      fields={ProjectResource.fields}
+      submitLabel="Create"
+      cancelHref="/admin/projects"
+      action={create}
+    />
   );
 }

@@ -2,70 +2,109 @@ import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { UserResource } from "@/switchboard/generated/UserResource";
-import { SimpleTable, type Column } from "@/components/table/SimpleTable";
-import type { User } from "@prisma/client";
-import type { Prisma } from "@prisma/client";
+import type { Column } from "@/components/table/SimpleTable";
+import type { User, Prisma } from "@prisma/client";
 
-type PageProps = {
-  searchParams?: Record<string, string | string[] | undefined>;
-};
-
-function getStr(param: string | string[] | undefined, fallback = ""): string {
-  return typeof param === "string" ? param : fallback;
-}
+type SearchParams = Record<string, string | string[] | undefined>;
+type PageProps = { searchParams: Promise<SearchParams> };
 
 export default async function UserListPage({ searchParams }: PageProps) {
-  // --- query params (typed)
-  const q = getStr(searchParams?.q, "").trim();
-  const page = Number(getStr(searchParams?.page, "1")) || 1;
-
+  const params = await searchParams;
+  const q = typeof params.q === "string" ? params.q.trim() : "";
+  const page = Number(params.page ?? 1) || 1;
   const take = UserResource.list?.perPage ?? 20;
   const skip = (page - 1) * take;
 
-  // --- sorting
-  const defaultSort = { key: "createdAt", dir: "desc" as const };
-  const sortKey = getStr(searchParams?.sort, defaultSort.key);
-  const sortDir = (getStr(searchParams?.dir, defaultSort.dir) === "asc"
-    ? "asc"
-    : "desc") as "asc" | "desc";
+  // Sorting
+  const defaultSortKey = "createdAt";
+  const defaultSortDir: "asc" | "desc" = "desc";
+  const sortKey =
+    typeof params.sort === "string" ? params.sort : defaultSortKey;
+  const sortDir =
+    params.dir === "asc" || params.dir === "desc" ? params.dir : defaultSortDir;
+  const orderBy = (
+    sortKey ? { [sortKey]: sortDir } : { createdAt: "desc" }
+  ) as Prisma.UserOrderByWithRelationInput;
 
-  // Make orderBy explicit so we never pass a weird shape
-  const orderBy: Prisma.UserOrderByWithRelationInput = sortKey
-    ? { [sortKey]: sortDir } as Prisma.UserOrderByWithRelationInput
-    : { createdAt: "desc" };
+  // Search
+  const searchable = UserResource.list?.searchable ?? [];
+  const where = (
+    q && searchable.length
+      ? { OR: searchable.map((field) => ({ [field]: { contains: q } })) }
+      : {}
+  ) as Prisma.UserWhereInput;
 
-  // --- safe search (only string fields)
-  const where: Prisma.UserWhereInput =
-    q.length > 0
-      ? {
-          OR: [
-            { name: { contains: q } },
-            { email: { contains: q } },
-          ],
-        }
-      : {};
-
-  // --- data
   const [items, total] = await Promise.all([
-    prisma.user.findMany({ where, orderBy, skip, take }),
+    prisma.user.findMany({
+      where,
+      orderBy,
+      skip,
+      take,
+    }),
     prisma.user.count({ where }),
   ]);
 
-  // ---- columns (typed; no `any`) ----
-  const baseColumns: Column<User>[] =
-    UserResource.list?.columns?.map((c) => ({ key: c.key as keyof User, header: c.header })) ?? [
-      { key: "name", header: "Name" },
-      { key: "email", header: "Email" },
-      { key: "role", header: "Role" },
-    ];
+  type GeneratedColumn = {
+    key: string;
+    header?: string;
+    format?: "datetime" | "date" | "boolean";
+  };
+  const generatedColumns = (UserResource.list?.columns ?? [
+    {
+      key: "name",
+      header: "Name",
+    },
+    {
+      key: "email",
+      header: "Email",
+    },
+    {
+      key: "role",
+      header: "Role",
+    },
+  ]) as readonly GeneratedColumn[];
 
-  const columns: Column<User>[] = baseColumns.map((c) => c);
+  const columns: Column<User>[] = generatedColumns.map((column) => {
+    const baseColumn: Column<User> = {
+      key: column.key,
+      header: column.header,
+    };
+    if (column.format === "datetime") {
+      return {
+        ...baseColumn,
+        cell: (row) =>
+          new Date(
+            String((row as unknown as Record<string, unknown>)[column.key]),
+          ).toLocaleString(),
+      };
+    }
+    if (column.format === "date") {
+      return {
+        ...baseColumn,
+        cell: (row) =>
+          new Date(
+            String((row as unknown as Record<string, unknown>)[column.key]),
+          ).toLocaleDateString(),
+      };
+    }
+    if (column.format === "boolean") {
+      return {
+        ...baseColumn,
+        cell: (row) =>
+          (row as unknown as Record<string, unknown>)[column.key]
+            ? "Yes"
+            : "No",
+      };
+    }
+    return baseColumn;
+  });
 
-  // ---- actions ----
   async function del(formData: FormData) {
     "use server";
     const id = String(formData.get("id"));
-    await prisma.user.delete({ where: { id } });
+    await prisma.user.delete({
+      where: { id: id },
+    });
     revalidatePath("/admin/users");
   }
 
@@ -82,18 +121,15 @@ export default async function UserListPage({ searchParams }: PageProps) {
 
   const headerLink = (key: string, label?: string) => {
     const active = sortKey === key;
-    const nextDir: "asc" | "desc" = active && sortDir === "asc" ? "desc" : "asc";
-    const href = `/admin/users${qs({ page: 1, sort: key, dir: active ? nextDir : "asc" })}`;
+    const nextDir = active && sortDir === "asc" ? "desc" : "asc";
+    const base = `/admin/users${qs({ page: 1, sort: key, dir: active ? nextDir : "asc" })}`;
     return (
-      <a href={href} className="hover:underline">
+      <a href={base} className="hover:underline">
         {label ?? key}
         {active ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
       </a>
     );
   };
-
-  // ---- safe cell access without `any` ----
-  const getValue = (row: User, key: string): unknown => (row as unknown as Record<string, unknown>)[key];
 
   return (
     <section className="space-y-4">
@@ -113,7 +149,9 @@ export default async function UserListPage({ searchParams }: PageProps) {
           type="text"
           name="q"
           defaultValue={q}
-          placeholder={"Search " + (UserResource.list?.searchable ?? ["name", "email"]).join(", ")}
+          placeholder={
+            "Search " + (UserResource.list?.searchable ?? []).join(", ")
+          }
           className="w-72 rounded border px-3 py-2 text-sm"
         />
         <input type="hidden" name="sort" value={sortKey} />
@@ -132,24 +170,45 @@ export default async function UserListPage({ searchParams }: PageProps) {
                   {headerLink(String(c.key), c.header)}
                 </th>
               ))}
-              <th className="px-3 py-2" />
+              <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
             {items.map((row) => (
-              <tr key={row.id} className="border-t">
+              <tr
+                key={String((row as unknown as Record<string, unknown>).id)}
+                className="border-t"
+              >
                 {columns.map((c) => (
                   <td key={String(c.key)} className="px-3 py-2">
-                    {c.cell ? c.cell(row) : String(getValue(row, String(c.key)) ?? "")}
+                    {c.cell
+                      ? c.cell(row)
+                      : String(
+                          (row as unknown as Record<string, unknown>)[c.key] ??
+                            "",
+                        )}
                   </td>
                 ))}
                 <td className="px-3 py-2">
                   <div className="flex gap-3">
-                    <Link className="underline" href={`/admin/users/${row.id}/edit`}>
+                    <Link
+                      className="underline"
+                      href={
+                        "/admin/users/" +
+                        String((row as unknown as Record<string, unknown>).id) +
+                        "/edit"
+                      }
+                    >
                       Edit
                     </Link>
                     <form action={del}>
-                      <input type="hidden" name="id" value={row.id} />
+                      <input
+                        type="hidden"
+                        name="id"
+                        value={String(
+                          (row as unknown as Record<string, unknown>).id,
+                        )}
+                      />
                       <button type="submit" className="text-red-600 underline">
                         Delete
                       </button>
@@ -160,7 +219,10 @@ export default async function UserListPage({ searchParams }: PageProps) {
             ))}
             {items.length === 0 && (
               <tr>
-                <td className="px-3 py-6 text-center text-gray-500" colSpan={columns.length + 1}>
+                <td
+                  className="px-3 py-6 text-center text-gray-500"
+                  colSpan={columns.length + 1}
+                >
                   No records.
                 </td>
               </tr>

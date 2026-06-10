@@ -18,7 +18,7 @@ async function format(text) {
 program
   .name("switchboard")
   .description("CLI for generating Switchboard admin resources and pages")
-  .version("0.3.1");
+  .version("0.4.2");
 
 program
   .command("generate")
@@ -70,6 +70,57 @@ program
     const baseType = (t) => t.replace(/\?$/, "").replace(/\[\]$/, "");
     const isOptional = (t) => t.endsWith("?");
     const isArray = (t) => t.replace(/\?$/, "").endsWith("[]");
+    const scalarTypes = new Set([
+      "String",
+      "Int",
+      "Float",
+      "Decimal",
+      "BigInt",
+      "Boolean",
+      "DateTime",
+      "Json",
+      "Bytes",
+    ]);
+    const isScalarField = (field) => {
+      const type = baseType(field.type);
+      return !isArray(field.type) && (scalarTypes.has(type) || Boolean(enums[type]));
+    };
+    const formValueFor = (field, prismaInputType) => {
+      const type = baseType(field.type);
+      const value = `formData.get("${field.name}")`;
+      const stringValue = `String(${value} ?? "")`;
+      const emptyValue = isOptional(field.type) ? "null" : '""';
+
+      if (enums[type]) {
+        return `${stringValue} as ${prismaInputType}["${field.name}"]`;
+      }
+      switch (type) {
+        case "Int":
+        case "Float":
+        case "Decimal":
+          return isOptional(field.type)
+            ? `${value} ? Number(${value}) : null`
+            : `Number(${value})`;
+        case "BigInt":
+          return isOptional(field.type)
+            ? `${value} ? BigInt(${stringValue}) : null`
+            : `BigInt(${stringValue})`;
+        case "Boolean":
+          return `formData.has("${field.name}")`;
+        case "DateTime":
+          return isOptional(field.type)
+            ? `${value} ? new Date(${stringValue}) : null`
+            : `new Date(${stringValue})`;
+        case "Json":
+          return `${value} ? JSON.parse(${stringValue}) : ${emptyValue}`;
+        case "Bytes":
+          return `Buffer.from(${stringValue})`;
+        default:
+          return isOptional(field.type)
+            ? `${value} ? ${stringValue} : null`
+            : stringValue;
+      }
+    };
     const tsTypeFor = (prismaTypeRaw) => {
       const base = baseType(prismaTypeRaw);
       let ts;
@@ -131,7 +182,9 @@ program
       if (options.model && options.model !== model.name) continue;
 
       const fieldsForUI = model.fields.filter(
-        (f) => !["id", "createdAt", "updatedAt"].includes(f.name)
+        (f) =>
+          !["id", "createdAt", "updatedAt"].includes(f.name) &&
+          isScalarField(f)
       );
 
       // generated ResourceConfig
@@ -202,43 +255,40 @@ await fs.ensureDir(editDir);
 
 const idName = model.idField?.name ?? "id";
 const idTypeBase = baseType(model.idField?.type ?? "String");
-const idFromParams =
-  idTypeBase === "Int" ||
-  idTypeBase === "Float" ||
-  idTypeBase === "Decimal"
-    ? "Number(params.id)"
-    : "params.id";
-
 
 const listPage = `
   import { prisma } from "@/lib/prisma";
   import Link from "next/link";
   import { revalidatePath } from "next/cache";
   import { ${model.name}Resource } from "@/switchboard/generated/${model.name}Resource";
-  import { SimpleTable, type Column } from "@/components/table/SimpleTable";
-  import type { ${model.name} } from "@prisma/client";
+  import type { Column } from "@/components/table/SimpleTable";
+  import type { ${model.name}, Prisma } from "@prisma/client";
 
-  type PageProps = { searchParams?: Record<string, string | string[] | undefined> };
+  type SearchParams = Record<string, string | string[] | undefined>;
+  type PageProps = { searchParams: Promise<SearchParams> };
 
   export default async function ${model.name}ListPage({ searchParams }: PageProps) {
-    const q = typeof searchParams?.q === "string" ? searchParams.q.trim() : "";
-    const page = Number(searchParams?.page ?? 1) || 1;
+    const params = await searchParams;
+    const q = typeof params.q === "string" ? params.q.trim() : "";
+    const page = Number(params.page ?? 1) || 1;
     const take = ${model.name}Resource.list?.perPage ?? 20;
     const skip = (page - 1) * take;
 
     // Sorting
-    const defaultSort = ${JSON.stringify(
-      model.hasCreatedAt ? { key: "createdAt", dir: "desc" } : null
-    )};
-    const sortKey = typeof searchParams?.sort === "string" ? searchParams.sort : (defaultSort?.key ?? "");
-    const sortDir = (typeof searchParams?.dir === "string" ? searchParams.dir : (defaultSort?.dir ?? "asc")) as "asc" | "desc";
-    const orderBy = sortKey ? { [sortKey]: sortDir } : ${model.hasCreatedAt ? `{ createdAt: "desc" as const }` : "{}"};
+    const defaultSortKey = ${JSON.stringify(model.hasCreatedAt ? "createdAt" : "")};
+    const defaultSortDir: "asc" | "desc" = ${JSON.stringify(model.hasCreatedAt ? "desc" : "asc")};
+    const sortKey = typeof params.sort === "string" ? params.sort : defaultSortKey;
+    const sortDir =
+      params.dir === "asc" || params.dir === "desc"
+        ? params.dir
+        : defaultSortDir;
+    const orderBy = (sortKey ? { [sortKey]: sortDir } : ${model.hasCreatedAt ? `{ createdAt: "desc" }` : "{}"}) as Prisma.${model.name}OrderByWithRelationInput;
 
     // Search
     const searchable = ${model.name}Resource.list?.searchable ?? [];
-    const where = q && searchable.length
-      ? { OR: searchable.map((f) => ({ [f]: { contains: q, mode: "insensitive" as const } })) }
-      : {};
+    const where = (q && searchable.length
+      ? { OR: searchable.map((field) => ({ [field]: { contains: q } })) }
+      : {}) as Prisma.${model.name}WhereInput;
 
     const [items, total] = await Promise.all([
       prisma.${model.name.toLowerCase()}.findMany({
@@ -250,32 +300,39 @@ const listPage = `
       prisma.${model.name.toLowerCase()}.count({ where }),
     ]);
 
-    const baseColumns: Column<${model.name}>[] =
-      (${model.name}Resource.list?.columns ?? ${JSON.stringify(
+    type GeneratedColumn = {
+      key: string;
+      header?: string;
+      format?: "datetime" | "date" | "boolean";
+    };
+    const generatedColumns = (${model.name}Resource.list?.columns ?? ${JSON.stringify(
         (resourceFields || []).map((f) => ({ key: f.name, header: f.label })),
         null,
         2
-      )}) as any;
+      )}) as readonly GeneratedColumn[];
 
-    const columns: Column<${model.name}>[] = baseColumns.map((c) => {
-      const fmt = (c as any).format as "datetime" | "date" | "boolean" | undefined;
-      if (fmt === "datetime") {
-        return { ...c, cell: (row) => new Date((row as unknown as Record<string, unknown>)[c.key] as string).toLocaleString() };
+    const columns: Column<${model.name}>[] = generatedColumns.map((column) => {
+      const baseColumn: Column<${model.name}> = {
+        key: column.key,
+        header: column.header,
+      };
+      if (column.format === "datetime") {
+        return { ...baseColumn, cell: (row) => new Date(String((row as unknown as Record<string, unknown>)[column.key])).toLocaleString() };
       }
-      if (fmt === "date") {
-        return { ...c, cell: (row) => new Date((row as unknown as Record<string, unknown>)[c.key] as string).toLocaleDateString() };
+      if (column.format === "date") {
+        return { ...baseColumn, cell: (row) => new Date(String((row as unknown as Record<string, unknown>)[column.key])).toLocaleDateString() };
       }
-      if (fmt === "boolean") {
-        return { ...c, cell: (row) => (((row as unknown as Record<string, unknown>)[c.key]) ? "Yes" : "No") };
+      if (column.format === "boolean") {
+        return { ...baseColumn, cell: (row) => ((row as unknown as Record<string, unknown>)[column.key] ? "Yes" : "No") };
       }
-      return c;
+      return baseColumn;
     });
 
     async function del(formData: FormData) {
       "use server";
       const id = String(formData.get("${idName}"));
       await prisma.${model.name.toLowerCase()}.delete({
-        where: { ${idName}: ${idTypeBase === "Int" ? "Number(id)" : "id"} }
+        where: { ${idName}: ${idTypeBase === "Int" || idTypeBase === "Float" || idTypeBase === "Decimal" ? "Number(id)" : "id"} }
       });
       revalidatePath("/admin/${plural}");
     }
@@ -393,15 +450,28 @@ const listPage = `
       // new page — SmartForm + redirect
       const newPage = `
         import { prisma } from "@/lib/prisma";
+        import { revalidatePath } from "next/cache";
         import { redirect } from "next/navigation";
         import { SmartForm } from "@/components/form/SmartForm";
         import { ${model.name}Resource } from "@/switchboard/generated/${model.name}Resource";
+        import type { Prisma } from "@prisma/client";
 
         export default function New${model.name}Page() {
           async function create(formData: FormData) {
             "use server";
-            const data = Object.fromEntries(formData.entries());
+            const data: Prisma.${model.name}UncheckedCreateInput = {
+${fieldsForUI
+  .map(
+    (field) =>
+      `              ${field.name}: ${formValueFor(
+        field,
+        `Prisma.${model.name}UncheckedCreateInput`
+      )},`
+  )
+  .join("\n")}
+            };
             await prisma.${model.name.toLowerCase()}.create({ data });
+            revalidatePath("/admin/${plural}");
             redirect("/admin/${plural}");
           }
 
@@ -420,31 +490,55 @@ const listPage = `
       // edit page — ID type respected
       const editPage = `
         import { prisma } from "@/lib/prisma";
+        import { revalidatePath } from "next/cache";
         import { redirect } from "next/navigation";
         import { SmartForm } from "@/components/form/SmartForm";
         import { ${model.name}Resource } from "@/switchboard/generated/${model.name}Resource";
+        import type { Prisma } from "@prisma/client";
 
-        export default async function Edit${model.name}Page({ params }: { params: { id: string } }) {
+        type PageProps = { params: Promise<{ id: string }> };
+
+        export default async function Edit${model.name}Page({ params }: PageProps) {
+          const routeParams = await params;
+          const id = ${idTypeBase === "Int" || idTypeBase === "Float" || idTypeBase === "Decimal" ? "Number(routeParams.id)" : "routeParams.id"};
           const existing = await prisma.${model.name.toLowerCase()}.findUnique({
-            where: { ${idName}: ${idFromParams} }
+            where: { ${idName}: id }
           });
           if (!existing) return <p className="text-sm text-gray-500">Not found.</p>;
 
           async function update(formData: FormData) {
             "use server";
-            const data = Object.fromEntries(formData.entries());
+            const data: Prisma.${model.name}UncheckedUpdateInput = {
+${fieldsForUI
+  .map(
+    (field) =>
+      `              ${field.name}: ${formValueFor(
+        field,
+        `Prisma.${model.name}UncheckedUpdateInput`
+      )},`
+  )
+  .join("\n")}
+            };
             await prisma.${model.name.toLowerCase()}.update({
-              where: { ${idName}: ${idFromParams} },
+              where: { ${idName}: id },
               data
             });
+            revalidatePath("/admin/${plural}");
             redirect("/admin/${plural}");
           }
+
+          const initialValues = Object.fromEntries(
+            Object.entries(existing).map(([key, value]) => [
+              key,
+              value instanceof Date ? value.toISOString().slice(0, 16) : value,
+            ])
+          );
 
           return (
             <SmartForm
               title="Edit ${model.name}"
               fields={${model.name}Resource.fields}
-              initialValues={existing as any}
+              initialValues={initialValues}
               submitLabel="Save"
               cancelHref="/admin/${plural}"
               action={update}

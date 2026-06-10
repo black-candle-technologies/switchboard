@@ -6,7 +6,7 @@ export default function HomePage() {
       <h1 className="text-2xl font-semibold">Admin Dashboard</h1>
       <p className="text-sm text-gray-600">
         This is Switchboard v0 (MVP). Start with the{" "}
-        <Link className="underline" href="/users">Users</Link> resource.
+        <Link className="underline" href="/admin/users">Users</Link> resource.
       </p>
     </section>
   );

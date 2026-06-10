@@ -15,12 +15,12 @@
   "author": "Lane Bucher <lane.bucher15@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/LaneBucher/switchboard.git"
+    "url": "git+https://github.com/black-candle-technologies/switchboard.git"
   },
   "bugs": {
-    "url": "https://github.com/LaneBucher/switchboard/issues"
+    "url": "https://github.com/black-candle-technologies/switchboard/issues"
   },
-  "homepage": "https://github.com/LaneBucher/switchboard#readme",
+  "homepage": "https://github.com/black-candle-technologies/switchboard#readme",
   "engines": {
     "node": ">=18"
   },

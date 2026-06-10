@@ -15,7 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
             <Link href="/" className="font-semibold">Switchboard</Link>
             <div className="space-x-4">
-              <Link href="/users" className="text-sm hover:underline">Users</Link>
+              <Link href="/admin/users" className="text-sm hover:underline">Users</Link>
             </div>
           </nav>
         </header>

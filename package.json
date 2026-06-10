@@ -2,6 +2,14 @@
   "name": "switchboard",
   "version": "0.1.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/black-candle-technologies/switchboard.git"
+  },
+  "bugs": {
+    "url": "https://github.com/black-candle-technologies/switchboard/issues"
+  },
+  "homepage": "https://github.com/black-candle-technologies/switchboard#readme",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",

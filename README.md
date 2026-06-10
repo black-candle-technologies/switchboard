@@ -1,141 +1,123 @@
 # Switchboard
 
-**Switchboard** is a modular, open-source admin panel and API
-scaffolding generator designed for modern web applications built with
-**Next.js**, **Prisma**, and **TypeScript**. It lets developers spin up
-fully functional, database-driven admin dashboards in seconds --- and
-extend or customize them with minimal effort.
+Switchboard is a Next.js, Prisma, and TypeScript project for generating
+database-backed admin resources and routes from a Prisma schema. The CLI is
+published as
+[`@lanebucher/switchboard`](https://www.npmjs.com/package/@lanebucher/switchboard).
 
-**NPM PACKAGE** https://www.npmjs.com/package/@lanebucher/switchboard
+## Local Development
 
-------------------------------------------------------------------------
+Requirements:
 
-## Features
+- Node.js 18 or newer
+- npm
 
--   **Auto-generation**: Generate CRUD admin pages for any Prisma
-    model instantly.
--   **Type-safe forms and tables** powered by Zod and TypeScript.
--   **Composable architecture** -- designed for integration into
-    existing projects.
--   **Automatic registry**: Keeps all generated resources neatly
-    tracked.
--   **Smart CLI**: Built using Commander.js, fs-extra, and Prettier
-    for smooth operation.
--   **Minimal styling** with TailwindCSS out of the box --- easily
-    replaceable.
+Set up the repository:
 
-------------------------------------------------------------------------
-
-## Getting Started
-
-### 1. Clone the Repository
-
-``` bash
-git clone https://github.com/LaneBucher/switchboard.git
+```bash
+git clone https://github.com/black-candle-technologies/switchboard.git
 cd switchboard
-```
-
-### 2. Install Dependencies
-
-``` bash
 npm install
 ```
 
-### 3. Link the CLI Locally (for development/testing)
+Create the local environment file:
 
-``` bash
+```bash
+cp .env.example .env
+```
+
+On PowerShell, use:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+The SQLite connection must be:
+
+```dotenv
+DATABASE_URL="file:./dev.db"
+```
+
+Prisma resolves that path relative to `src/prisma/schema.prisma`, so the local
+database is created at `src/prisma/dev.db`.
+
+Initialize and seed the database, then start the app:
+
+```bash
+npm run db:migrate
+npm run db:seed
+npm run dev
+```
+
+Open `http://localhost:3000/admin`. The generated resource routes are under
+`/admin/<resource>`, for example `/admin/users`.
+
+## CLI Development
+
+Link the CLI from this repository:
+
+```bash
 cd packages/cli
+npm install
 npm link
 ```
 
-This will globally register the `switchboard` command.
+Then run it from the root of a compatible Next.js project:
 
-### 4. Run Switchboard in a Project
-
-Inside any **Next.js + Prisma** project with a valid `schema.prisma`,
-run:
-
-``` bash
+```bash
 switchboard generate --pages
 ```
 
-This will create:
+To test the published package without linking it globally:
 
--   Resource definitions under `src/switchboard/generated`
--   Admin pages under `src/app/admin` (with list, new, and edit views)
--   An automatic `registry.ts` linking all generated resources
-
-------------------------------------------------------------------------
-
-## Development Workflow
-
-Switchboard uses a monorepo layout:
-
-    switchboard/
-    ├── packages/
-    │   └── cli/        # CLI package (published to npm as @lanebucher/switchboard)
-    ├── src/            # Core logic and shared utilities
-    ├── prisma/         # Example schema and seed files
-    └── README.md
-
-### Commands
-
-  Command                  Description
-  ------------------------ ---------------------------------------------
-  `npm run dev`            Starts the Next.js app (for local testing).
-  `npm run db:seed`        Seeds the local SQLite database.
-  `switchboard generate`   Generates new resources and pages.
-
-------------------------------------------------------------------------
-
-## Publishing the CLI
-
-### Step 1: Increment the Version
-
-``` bash
-npm version patch -m "chore(release): %s"
+```bash
+npx @lanebucher/switchboard generate --pages
 ```
 
-### Step 2: Publish to npm
+The CLI expects the Prisma schema at `src/prisma/schema.prisma`.
 
-``` bash
-npm publish --access public
+## Generated Output
+
+`generate` always writes:
+
+```text
+src/switchboard/generated/<Model>Resource.ts
+src/switchboard/registry.ts
 ```
 
-Ensure your `package.json` in `packages/cli` has the correct scope and
-metadata (e.g., `@lanebucher/switchboard`).
+With `--pages`, it also writes:
 
-------------------------------------------------------------------------
+```text
+src/app/admin/page.tsx
+src/app/admin/layout.tsx          # created only when it does not exist
+src/app/admin/<models>/page.tsx
+src/app/admin/<models>/new/page.tsx
+src/app/admin/<models>/[id]/edit/page.tsx
+```
 
-## Testing Locally in Another Project
+The current CLI generates project-specific files rather than installing a
+standalone admin framework. Generated pages import host-project modules such as
+`@/lib/prisma`, `@/components/form/SmartForm`,
+`@/components/table/SimpleTable`, and `@/switchboard/types`. A target project
+must provide compatible versions of those modules.
 
-1.  Run this in your Switchboard repo root:
+Use `--model` to limit generation to one Prisma model:
 
-    ``` bash
-    cd packages/cli
-    npm link
-    ```
+```bash
+npx @lanebucher/switchboard generate --model User --pages
+```
 
-2.  Then in another project:
+## Commands
 
-    ``` bash
-    npm link @lanebucher/switchboard
-    ```
-
-Now you can use `switchboard generate` directly in that project.
-
-------------------------------------------------------------------------
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Start the local Next.js app. |
+| `npm run lint` | Run ESLint. |
+| `npm run build` | Create a production build. |
+| `npm run db:generate` | Generate the Prisma client. |
+| `npm run db:migrate` | Apply local Prisma migrations. |
+| `npm run db:seed` | Seed the local SQLite database. |
 
 ## License
 
-This project is licensed under the **MIT License**.
-
-**Copyright (c) 2025 Lane Bucher**\
-Email: <lane.bucher15@gmail.com>
-
-------------------------------------------------------------------------
-
-## Contributing
-
-Contributions, issues, and feature requests are welcome.\
-Feel free to open a pull request or submit an issue on GitHub.
+MIT

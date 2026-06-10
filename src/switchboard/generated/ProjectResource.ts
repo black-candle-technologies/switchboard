@@ -6,8 +6,6 @@ export type ProjectShape = {
   description?: string;
   status: "ACTIVE" | "ON_HOLD" | "DONE";
   ownerId?: string;
-  owner?: unknown;
-  tasks: unknown[];
 };
 
 export const ProjectResource: ResourceConfig<ProjectShape> = {
@@ -61,22 +59,6 @@ export const ProjectResource: ResourceConfig<ProjectShape> = {
         type: "text",
       },
     },
-    {
-      name: "owner",
-      label: "Owner",
-      required: false,
-      widget: {
-        type: "text",
-      },
-    },
-    {
-      name: "tasks",
-      label: "Tasks",
-      required: true,
-      widget: {
-        type: "text",
-      },
-    },
   ],
   list: {
     perPage: 20,
@@ -97,14 +79,6 @@ export const ProjectResource: ResourceConfig<ProjectShape> = {
       {
         key: "ownerId",
         header: "OwnerId",
-      },
-      {
-        key: "owner",
-        header: "Owner",
-      },
-      {
-        key: "tasks",
-        header: "Tasks",
       },
     ],
     defaultSort: {

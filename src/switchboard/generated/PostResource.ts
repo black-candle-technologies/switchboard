@@ -6,7 +6,6 @@ export type PostShape = {
   content?: string;
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   authorId: string;
-  author: unknown;
 };
 
 export const PostResource: ResourceConfig<PostShape> = {
@@ -60,14 +59,6 @@ export const PostResource: ResourceConfig<PostShape> = {
         type: "text",
       },
     },
-    {
-      name: "author",
-      label: "Author",
-      required: true,
-      widget: {
-        type: "text",
-      },
-    },
   ],
   list: {
     perPage: 20,
@@ -88,10 +79,6 @@ export const PostResource: ResourceConfig<PostShape> = {
       {
         key: "authorId",
         header: "AuthorId",
-      },
-      {
-        key: "author",
-        header: "Author",
       },
     ],
     defaultSort: {
