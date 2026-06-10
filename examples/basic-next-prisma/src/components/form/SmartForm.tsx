@@ -32,10 +32,10 @@ export function SmartForm({
           const value = initialValues[field.name];
           if (field.widget.type === "select") {
             return (
-              <label className="sb-form-row" key={field.name}>
-                <span className="sb-label">{field.label}</span>
+              <label className="sb-form-field" key={field.name}>
+                <span className="sb-form-label">{field.label}</span>
                 <select
-                  className="sb-input"
+                  className="sb-form-control sb-select"
                   defaultValue={String(value ?? "")}
                   name={field.name}
                   required={field.required}
@@ -52,28 +52,31 @@ export function SmartForm({
           }
           if (field.widget.type === "textarea") {
             return (
-              <label className="sb-form-row" key={field.name}>
-                <span className="sb-label">{field.label}</span>
+              <label className="sb-form-field" key={field.name}>
+                <span className="sb-form-label">{field.label}</span>
                 <textarea
-                  className="sb-input"
+                  className="sb-form-control sb-textarea"
                   defaultValue={String(value ?? "")}
                   name={field.name}
                   required={field.required}
-                  rows={field.widget.rows ?? 4}
+                  rows={field.widget.rows ?? 6}
                 />
               </label>
             );
           }
           if (field.widget.type === "checkbox") {
             return (
-              <label className="sb-checkbox-row" key={field.name}>
+              <label
+                className="sb-form-field sb-checkbox-field"
+                key={field.name}
+              >
                 <input
                   className="sb-checkbox"
                   defaultChecked={Boolean(value)}
                   name={field.name}
                   type="checkbox"
                 />
-                <span className="sb-label">{field.label}</span>
+                <span className="sb-form-label">{field.label}</span>
               </label>
             );
           }
@@ -84,10 +87,10 @@ export function SmartForm({
                 ? "datetime-local"
                 : "text";
           return (
-            <label className="sb-form-row" key={field.name}>
-              <span className="sb-label">{field.label}</span>
+            <label className="sb-form-field" key={field.name}>
+              <span className="sb-form-label">{field.label}</span>
               <input
-                className="sb-input"
+                className="sb-form-control"
                 defaultValue={String(value ?? "")}
                 name={field.name}
                 required={field.required}
