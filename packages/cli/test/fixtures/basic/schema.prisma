@@ -12,6 +12,11 @@ enum Role {
   USER
 }
 
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
@@ -25,10 +30,16 @@ model User {
 }
 
 model Post {
-  id        String   @id @default(cuid())
-  title     String
-  authorId  String
-  author    User     @relation(fields: [authorId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String     @id @default(cuid())
+  title       String
+  content     String?
+  status      PostStatus @default(DRAFT)
+  featured    Boolean    @default(false)
+  viewCount   Int        @default(0)
+  publishedAt DateTime?
+  metadata    Json?
+  authorId    String
+  author      User       @relation(fields: [authorId], references: [id])
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 }

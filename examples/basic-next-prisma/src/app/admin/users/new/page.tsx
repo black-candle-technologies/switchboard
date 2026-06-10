@@ -5,25 +5,55 @@ import { redirect } from "next/navigation";
 import { SmartForm } from "@/components/form/SmartForm";
 import { UserResource } from "@/switchboard/generated/UserResource";
 import { hashPassword } from "@/switchboard/auth";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
-export default function NewUserPage() {
-  async function create(formData: FormData) {
+function actionErrorMessage(error: unknown, operation: "save" | "delete") {
+  console.error(`Switchboard failed to ${operation} User:`, error);
+  if (error instanceof SyntaxError) {
+    return "A JSON field contains invalid JSON.";
+  }
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === "P2002") {
+      return "A record with that unique value already exists.";
+    }
+    if (error.code === "P2003") {
+      return operation === "delete"
+        ? "This record cannot be deleted because other records still reference it."
+        : "A selected related record no longer exists.";
+    }
+    if (error.code === "P2025") return "This record no longer exists.";
+  }
+  return operation === "delete"
+    ? "The record could not be deleted."
+    : "The record could not be saved. Check the values and try again.";
+}
+
+export default async function NewUserPage() {
+  const relationOptions = {};
+
+  async function create(
+    _previousState: { error?: string },
+    formData: FormData,
+  ) {
     "use server";
-    const data: Prisma.UserUncheckedCreateInput = {
-      name: String(formData.get("name") ?? ""),
-      username: String(formData.get("username") ?? ""),
-      email: String(formData.get("email") ?? ""),
-      passwordHash: await hashPassword(
-        String(formData.get("passwordHash") ?? ""),
-      ),
-      role: formData.get("role")
-        ? (String(
-            formData.get("role") ?? "",
-          ) as Prisma.UserUncheckedCreateInput["role"])
-        : undefined,
-    };
-    await prisma.user.create({ data });
+    try {
+      const data: Prisma.UserUncheckedCreateInput = {
+        name: String(formData.get("name") ?? ""),
+        username: String(formData.get("username") ?? ""),
+        email: String(formData.get("email") ?? ""),
+        passwordHash: await hashPassword(
+          String(formData.get("passwordHash") ?? ""),
+        ),
+        role: formData.get("role")
+          ? (String(
+              formData.get("role") ?? "",
+            ) as Prisma.UserUncheckedCreateInput["role"])
+          : undefined,
+      };
+      await prisma.user.create({ data });
+    } catch (error) {
+      return { error: actionErrorMessage(error, "save") };
+    }
     revalidatePath("/admin/users");
     redirect("/admin/users");
   }
@@ -32,6 +62,7 @@ export default function NewUserPage() {
     <SmartForm
       title="New User"
       fields={UserResource.fields}
+      relationOptions={relationOptions}
       submitLabel="Create"
       cancelHref="/admin/users"
       action={create}

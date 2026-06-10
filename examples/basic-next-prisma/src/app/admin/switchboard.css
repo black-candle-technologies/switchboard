@@ -223,6 +223,12 @@ body {
   text-decoration: none !important;
 }
 
+.sb-button:disabled,
+.sb-button-danger:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .sb-button-secondary {
   border-color: var(--sb-border);
   background: var(--sb-surface);
@@ -348,6 +354,17 @@ body {
   border-top: 1px solid var(--sb-border);
 }
 
+.sb-form-error {
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid #f0b4ae;
+  border-radius: 8px;
+  background: #fff4f2;
+  color: var(--sb-danger);
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .sb-login-shell {
   display: grid;
   min-height: 100vh;
@@ -415,6 +432,42 @@ body {
   padding: 13px 14px;
   border-bottom: 1px solid #edf0f3;
   vertical-align: middle;
+}
+
+.sb-table-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 5px 9px;
+  border: 1px solid var(--sb-border);
+  border-radius: 7px;
+  background: var(--sb-surface);
+  color: var(--sb-accent);
+  font-weight: 650;
+}
+
+.sb-table-action:hover {
+  border-color: #b9c2cc;
+  background: var(--sb-surface-muted);
+  text-decoration: none !important;
+}
+
+.sb-null-value {
+  color: var(--sb-muted);
+  font-style: italic;
+}
+
+.sb-delete-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sb-delete-error {
+  max-width: 240px;
+  color: var(--sb-danger);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .sb-table tbody tr:last-child td {

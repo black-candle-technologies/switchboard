@@ -44,9 +44,9 @@ enum Role {
 
 afterEach(async () => {
   await Promise.all(
-    tempProjects.splice(0).map((projectRoot) =>
-      rm(projectRoot, { recursive: true, force: true }),
-    ),
+    tempProjects
+      .splice(0)
+      .map((projectRoot) => rm(projectRoot, { recursive: true, force: true })),
   );
 });
 
@@ -57,12 +57,15 @@ async function createProject({
   withAlias = true,
   configFile = "tsconfig.json",
 } = {}) {
-  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "switchboard-init-"));
+  const projectRoot = await mkdtemp(
+    path.join(os.tmpdir(), "switchboard-init-"),
+  );
   tempProjects.push(projectRoot);
 
   const usesSrc = appDir.startsWith("src/");
   const resolvedSchemaPath =
-    schemaPath ?? (usesSrc ? "src/prisma/schema.prisma" : "prisma/schema.prisma");
+    schemaPath ??
+    (usesSrc ? "src/prisma/schema.prisma" : "prisma/schema.prisma");
   await mkdir(path.join(projectRoot, appDir), { recursive: true });
   await mkdir(path.dirname(path.join(projectRoot, resolvedSchemaPath)), {
     recursive: true,
@@ -106,6 +109,7 @@ test("init creates support files in a src/app project", async () => {
     "src/switchboard/auth.ts",
     "src/switchboard/auth-actions.ts",
     "src/components/form/SmartForm.tsx",
+    "src/components/form/DeleteButton.tsx",
     "src/components/table/SimpleTable.tsx",
     "src/middleware.ts",
     "src/app/admin/switchboard.css",
@@ -138,19 +142,21 @@ test("init creates support files in a src/app project", async () => {
   assert.match(stylesheet, /\.sb-select/);
   assert.match(stylesheet, /\.sb-login-shell/);
   const smartForm = await readFile(
-    path.join(
-      projectRoot,
-      "src",
-      "components",
-      "form",
-      "SmartForm.tsx",
-    ),
+    path.join(projectRoot, "src", "components", "form", "SmartForm.tsx"),
     "utf8",
   );
   assert.match(smartForm, /className="sb-form-field"/);
   assert.match(smartForm, /className="sb-form-label"/);
   assert.match(smartForm, /className="sb-form-control sb-textarea"/);
   assert.match(smartForm, /className="sb-form-control sb-select"/);
+  assert.match(smartForm, /useActionState/);
+  assert.match(smartForm, /relationOptions/);
+  const deleteButton = await readFile(
+    path.join(projectRoot, "src", "components", "form", "DeleteButton.tsx"),
+    "utf8",
+  );
+  assert.match(deleteButton, /window\.confirm/);
+  assert.match(deleteButton, /useActionState/);
   assert.match(stdout, /Next: run npx switchboard generate --pages/);
   assert.match(stdout, /SWITCHBOARD_SESSION_SECRET/);
   assert.match(stdout, /auth seed-admin/);
@@ -176,12 +182,7 @@ test("init creates support files in a root app project and generate still works"
   assert.match(userPage, /from "@\/switchboard\/generated\/UserResource"/);
 });
 
-for (const {
-  name,
-  appDir,
-  schemaPath,
-  supportRoot,
-} of [
+for (const { name, appDir, schemaPath, supportRoot } of [
   {
     name: "src/app + src/prisma without an alias",
     appDir: "src/app",
@@ -207,13 +208,7 @@ for (const {
 
     const prefix = supportRoot ? [supportRoot] : [];
     const smartForm = await readFile(
-      path.join(
-        projectRoot,
-        ...prefix,
-        "components",
-        "form",
-        "SmartForm.tsx",
-      ),
+      path.join(projectRoot, ...prefix, "components", "form", "SmartForm.tsx"),
       "utf8",
     );
     const layout = await readFile(
@@ -248,7 +243,7 @@ for (const {
     );
     assert.match(
       listPage,
-      /from "\.\.\/\.\.\/\.\.\/components\/table\/SimpleTable"/,
+      /from "\.\.\/\.\.\/\.\.\/components\/form\/DeleteButton"/,
     );
     assert.match(resource, /from "\.\.\/types"/);
     assert.match(registry, /from "\.\/overrides"/);
@@ -312,17 +307,16 @@ test("init preserves the admin stylesheet unless --force is used", async () => {
 
   const forced = await runCli(projectRoot, "init", "--force");
   assert.match(await readFile(target, "utf8"), /\.sb-admin-shell/);
-  assert.match(
-    forced.stdout,
-    /Overwrote src\/app\/admin\/switchboard\.css/,
-  );
+  assert.match(forced.stdout, /Overwrote src\/app\/admin\/switchboard\.css/);
 });
 
 test("init --dry-run writes nothing", async () => {
   const projectRoot = await createProject();
   const { stdout } = await runCli(projectRoot, "init", "--dry-run");
 
-  await assert.rejects(access(path.join(projectRoot, "src", "lib", "prisma.ts")));
+  await assert.rejects(
+    access(path.join(projectRoot, "src", "lib", "prisma.ts")),
+  );
   await assert.rejects(
     access(path.join(projectRoot, "src", "app", "admin", "page.tsx")),
   );
@@ -387,7 +381,9 @@ test("init supports custom schema and app directories", async () => {
 });
 
 test("init gives a clear error without a compatible App Router directory", async () => {
-  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "switchboard-init-"));
+  const projectRoot = await mkdtemp(
+    path.join(os.tmpdir(), "switchboard-init-"),
+  );
   tempProjects.push(projectRoot);
   await mkdir(path.join(projectRoot, "prisma"), { recursive: true });
   await writeFile(
@@ -411,7 +407,9 @@ test("init gives a clear error without a compatible App Router directory", async
 });
 
 test("init gives a clear error when no Prisma schema is found", async () => {
-  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "switchboard-init-"));
+  const projectRoot = await mkdtemp(
+    path.join(os.tmpdir(), "switchboard-init-"),
+  );
   tempProjects.push(projectRoot);
   await mkdir(path.join(projectRoot, "src", "app"), { recursive: true });
 
@@ -472,7 +470,9 @@ test("init protects an existing middleware unless --force is used", async () => 
     return true;
   });
   assert.equal(await readFile(middlewarePath, "utf8"), "// user middleware\n");
-  await assert.rejects(access(path.join(projectRoot, "src", "lib", "prisma.ts")));
+  await assert.rejects(
+    access(path.join(projectRoot, "src", "lib", "prisma.ts")),
+  );
 
   const forced = await runCli(projectRoot, "init", "--force");
   assert.match(forced.stdout, /Overwrote src\/middleware\.ts/);
@@ -496,7 +496,10 @@ test("init does not create environment or database files", async () => {
   }
   await collect(projectRoot);
 
-  assert.equal(files.some((file) => path.basename(file) === ".env"), false);
+  assert.equal(
+    files.some((file) => path.basename(file) === ".env"),
+    false,
+  );
   assert.equal(
     files.some((file) => /\.(?:db|sqlite|sqlite3)$/.test(file)),
     false,

@@ -1,126 +1,179 @@
-// src/components/form/SmartForm.tsx
 "use client";
-import React from "react";
+
+import { useActionState } from "react";
+
 import type { FieldConfig } from "@/switchboard/types";
+import type { FormActionState, RelationOption } from "@/switchboard/types";
 
 type Props = {
   title: string;
   fields: FieldConfig[];
   initialValues?: Record<string, unknown>;
+  relationOptions?: Record<string, RelationOption[]>;
   submitLabel?: string;
   cancelHref?: string;
-  action: (formData: FormData) => Promise<void>;
+  action: (
+    previousState: FormActionState,
+    formData: FormData,
+  ) => Promise<FormActionState>;
 };
 
-export function SmartForm({ title, fields, initialValues = {}, submitLabel = "Save", cancelHref, action }: Props) {
+export function SmartForm({
+  title,
+  fields,
+  initialValues = {},
+  relationOptions = {},
+  submitLabel = "Save",
+  cancelHref,
+  action,
+}: Props) {
+  const [state, formAction, isPending] = useActionState(action, {});
+
   return (
-    <section className="max-w-2xl space-y-4">
-      <h1 className="text-xl font-semibold">{title}</h1>
-      <form action={action} className="space-y-4 rounded border bg-white p-4">
-        {fields.map((f) => {
-          const name = f.name;
-          const label = f.label;
-          const value = (initialValues as Record<string, unknown>)[name];
-
-          switch (f.widget.type) {
-            case "select":
-              return (
-                <div key={name}>
-                  <label className="block text-sm font-medium">{label}</label>
-                  <select
-                    name={name}
-                    defaultValue={String(value ?? "")}
-                    className="mt-1 w-full rounded border px-3 py-2"
-                    required={f.required}
-                  >
-                    <option value=""></option>
-                    {f.widget.options.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              );
-
-            case "textarea":
-              return (
-                <div key={name}>
-                  <label className="block text-sm font-medium">{label}</label>
-                  <textarea
-                    name={name}
-                    defaultValue={String(value ?? "")}
-                    rows={f.widget.rows ?? 4}
-                    placeholder={("placeholder" in f.widget && f.widget.placeholder) || ""}
-                    className="mt-1 w-full rounded border px-3 py-2"
-                    required={f.required}
-                  />
-                </div>
-              );
-
-            case "email":
-              return (
-                <div key={name}>
-                  <label className="block text-sm font-medium">{label}</label>
-                  <input
-                    type="email"
-                    name={name}
-                    defaultValue={String(value ?? "")}
-                    placeholder={f.widget.placeholder}
-                    className="mt-1 w-full rounded border px-3 py-2"
-                    required={f.required}
-                  />
-                </div>
-              );
-
-            case "checkbox":
-              return (
-                <div key={name} className="flex items-center gap-2">
-                  <input type="checkbox" name={name} defaultChecked={Boolean(value)} className="h-4 w-4" />
-                  <label className="text-sm">{label}</label>
-                </div>
-              );
-
-            case "datetime":
-              return (
-                <div key={name}>
-                  <label className="block text-sm font-medium">{label}</label>
-                  <input
-                    type="datetime-local"
-                    name={name}
-                    defaultValue={typeof value === "string" ? value : ""}
-                    className="mt-1 w-full rounded border px-3 py-2"
-                    required={f.required}
-                  />
-                </div>
-              );
-
-            case "text":
-            default:
-              return (
-                <div key={name}>
-                  <label className="block text-sm font-medium">{label}</label>
-                  <input
-                    name={name}
-                    defaultValue={String(value ?? "")}
-                    placeholder={("placeholder" in f.widget && f.widget.placeholder) || ""}
-                    className="mt-1 w-full rounded border px-3 py-2"
-                    required={f.required}
-                  />
-                </div>
-              );
+    <section className="sb-page sb-page-narrow">
+      <div className="sb-page-header">
+        <div>
+          <p className="sb-eyebrow">Resource editor</p>
+          <h1 className="sb-page-title">{title}</h1>
+        </div>
+      </div>
+      <form action={formAction} className="sb-card sb-form">
+        {state.error ? (
+          <p className="sb-form-error" role="alert">
+            {state.error}
+          </p>
+        ) : null}
+        {fields.map((field) => {
+          const value = initialValues[field.name];
+          if (
+            field.widget.type === "select" ||
+            field.widget.type === "relation"
+          ) {
+            const options =
+              field.widget.type === "select"
+                ? field.widget.options
+                : (relationOptions[field.name] ?? []);
+            return (
+              <label className="sb-form-field" key={field.name}>
+                <span className="sb-form-label">{field.label}</span>
+                <select
+                  className="sb-form-control sb-select"
+                  defaultValue={String(value ?? "")}
+                  name={field.name}
+                  required={field.required}
+                >
+                  <option value="" />
+                  {options.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            );
           }
+          if (
+            field.widget.type === "textarea" ||
+            field.widget.type === "json"
+          ) {
+            return (
+              <label className="sb-form-field" key={field.name}>
+                <span className="sb-form-label">{field.label}</span>
+                <textarea
+                  className="sb-form-control sb-textarea"
+                  defaultValue={String(value ?? "")}
+                  name={field.name}
+                  required={field.required}
+                  rows={field.widget.rows ?? 6}
+                />
+              </label>
+            );
+          }
+          if (field.widget.type === "checkbox") {
+            if (field.widget.nullable) {
+              return (
+                <label className="sb-form-field" key={field.name}>
+                  <span className="sb-form-label">{field.label}</span>
+                  <select
+                    className="sb-form-control sb-select"
+                    defaultValue={
+                      value === null || value === undefined
+                        ? ""
+                        : String(Boolean(value))
+                    }
+                    name={field.name}
+                    required={field.required}
+                  >
+                    <option value="">Not set</option>
+                    <option value="true">Yes</option>
+                    <option value="false">No</option>
+                  </select>
+                </label>
+              );
+            }
+            return (
+              <label
+                className="sb-form-field sb-checkbox-field"
+                key={field.name}
+              >
+                <input
+                  className="sb-checkbox"
+                  defaultChecked={Boolean(value)}
+                  name={field.name}
+                  type="checkbox"
+                  value="true"
+                />
+                <input name={field.name} type="hidden" value="false" />
+                <span className="sb-form-label">{field.label}</span>
+              </label>
+            );
+          }
+          const inputType =
+            field.widget.type === "email"
+              ? "email"
+              : field.widget.type === "password"
+                ? "password"
+                : field.widget.type === "number"
+                  ? "number"
+                  : field.widget.type === "datetime"
+                    ? "datetime-local"
+                    : "text";
+          return (
+            <label className="sb-form-field" key={field.name}>
+              <span className="sb-form-label">{field.label}</span>
+              <input
+                className="sb-form-control"
+                autoComplete={
+                  field.widget.type === "password" ? "new-password" : undefined
+                }
+                defaultValue={
+                  field.widget.type === "password" ? "" : String(value ?? "")
+                }
+                name={field.name}
+                step={
+                  field.widget.type === "number" ? field.widget.step : undefined
+                }
+                required={
+                  field.required &&
+                  !(
+                    field.widget.type === "password" &&
+                    Object.keys(initialValues).length > 0
+                  )
+                }
+                type={inputType}
+              />
+            </label>
+          );
         })}
-
-        <div className="flex gap-2">
-          <button type="submit" className="rounded bg-black px-3 py-2 text-sm font-medium text-white hover:bg-gray-800">
-            {submitLabel}
+        <div className="sb-form-actions">
+          <button className="sb-button" disabled={isPending} type="submit">
+            {isPending ? "Saving..." : submitLabel}
           </button>
-          {cancelHref && (
-            <a href={cancelHref} className="rounded border px-3 py-2 text-sm">
+          {cancelHref ? (
+            <a className="sb-button sb-button-secondary" href={cancelHref}>
               Cancel
             </a>
-          )}
+          ) : null}
         </div>
       </form>
     </section>

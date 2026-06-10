@@ -74,6 +74,11 @@ resource and route files.
 The admin shell uses the generated `src/app/admin/switchboard.css` stylesheet.
 It is plain CSS with no framework dependency and can be edited or replaced.
 
+The example `Post` model exercises generated enum, optional text, boolean,
+number, optional DateTime, JSON, and `Post.authorId -> User` relation controls.
+The author foreign key is rendered as a User select and displayed by user name
+on the Post list page.
+
 From the repository root, run the full install, migration, generation, and
 build validation with:
 

@@ -5,6 +5,10 @@ export type PostShape = {
   title: string;
   content?: string;
   status?: "DRAFT" | "PUBLISHED";
+  featured?: boolean;
+  viewCount?: number;
+  publishedAt?: string;
+  metadata?: unknown;
   authorId: string;
 };
 
@@ -48,18 +52,71 @@ export const PostResource: ResourceConfig<PostShape> = {
       },
     },
     {
+      name: "featured",
+      label: "Featured",
+      required: false,
+      widget: {
+        type: "checkbox",
+        nullable: false,
+      },
+    },
+    {
+      name: "viewCount",
+      label: "View Count",
+      required: false,
+      widget: {
+        type: "number",
+        step: "1",
+      },
+    },
+    {
+      name: "publishedAt",
+      label: "Published At",
+      required: false,
+      widget: {
+        type: "datetime",
+      },
+    },
+    {
+      name: "metadata",
+      label: "Metadata",
+      required: false,
+      widget: {
+        type: "json",
+        rows: 10,
+      },
+    },
+    {
       name: "authorId",
-      label: "AuthorId",
+      label: "Author Id",
       required: true,
       widget: {
-        type: "text",
+        type: "relation",
+        model: "User",
+        valueKey: "id",
+        labelKey: "name",
       },
     },
   ],
   list: {
     perPage: 20,
-    searchable: ["title", "content", "authorId"],
+    searchable: ["title", "content"],
+    sortable: [
+      "id",
+      "title",
+      "content",
+      "status",
+      "featured",
+      "viewCount",
+      "publishedAt",
+      "createdAt",
+      "updatedAt",
+    ],
     columns: [
+      {
+        key: "id",
+        header: "Id",
+      },
       {
         key: "title",
         header: "Title",
@@ -73,8 +130,40 @@ export const PostResource: ResourceConfig<PostShape> = {
         header: "Status",
       },
       {
+        key: "featured",
+        header: "Featured",
+        format: "boolean",
+      },
+      {
+        key: "viewCount",
+        header: "View Count",
+      },
+      {
+        key: "publishedAt",
+        header: "Published At",
+        format: "datetime",
+      },
+      {
+        key: "metadata",
+        header: "Metadata",
+        format: "json",
+      },
+      {
         key: "authorId",
-        header: "AuthorId",
+        header: "Author",
+        format: "relation",
+        relationField: "author",
+        relationLabelKey: "name",
+      },
+      {
+        key: "createdAt",
+        header: "Created At",
+        format: "datetime",
+      },
+      {
+        key: "updatedAt",
+        header: "Updated At",
+        format: "datetime",
       },
     ],
     defaultSort: {

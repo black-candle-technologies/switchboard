@@ -13,6 +13,11 @@ export function supportFiles(layout, auth) {
     "form",
     "SmartForm.tsx",
   );
+  const deleteButtonPath = path.join(
+    layout.componentsDir,
+    "form",
+    "DeleteButton.tsx",
+  );
   const adminLayoutPath = path.join(layout.appDir, "admin", "layout.tsx");
   const adminPagePath = path.join(layout.appDir, "admin", "page.tsx");
   return [
@@ -38,12 +43,22 @@ export { prisma };
       content: `export type TextWidget = { type: "text"; placeholder?: string };
 export type EmailWidget = { type: "email"; placeholder?: string };
 export type PasswordWidget = { type: "password"; placeholder?: string };
+export type NumberWidget = {
+  type: "number";
+  step?: string;
+  placeholder?: string;
+};
 export type TextareaWidget = {
   type: "textarea";
   rows?: number;
   placeholder?: string;
 };
-export type CheckboxWidget = { type: "checkbox" };
+export type JsonWidget = {
+  type: "json";
+  rows?: number;
+  placeholder?: string;
+};
+export type CheckboxWidget = { type: "checkbox"; nullable?: boolean };
 export type DatetimeWidget = { type: "datetime" };
 export type SelectWidget = {
   type: "select";
@@ -60,7 +75,9 @@ export type FieldWidget =
   | TextWidget
   | EmailWidget
   | PasswordWidget
+  | NumberWidget
   | TextareaWidget
+  | JsonWidget
   | CheckboxWidget
   | DatetimeWidget
   | SelectWidget
@@ -77,14 +94,26 @@ export type FieldConfig = {
 export type ColumnConfig = {
   key: string;
   header?: string;
-  format?: "datetime" | "date" | "boolean";
+  format?: "datetime" | "date" | "boolean" | "json" | "relation";
+  relationField?: string;
+  relationLabelKey?: string;
 };
 export type SortConfig = { key: string; dir: "asc" | "desc" };
 export type ListConfig = {
   perPage?: number;
   searchable?: string[];
+  sortable?: string[];
   columns?: ColumnConfig[];
   defaultSort?: SortConfig;
+};
+
+export type FormActionState = {
+  error?: string;
+};
+
+export type RelationOption = {
+  value: string;
+  label: string;
 };
 
 export type ResourceConfig<T = unknown> = {
@@ -130,25 +159,38 @@ export const resources: ResourceConfig[] = [];
       path: smartFormPath,
       content: `"use client";
 
+import { useActionState } from "react";
+
 import type { FieldConfig } from "${importPath(layout, smartFormPath, typesPath)}";
+import type {
+  FormActionState,
+  RelationOption,
+} from "${importPath(layout, smartFormPath, typesPath)}";
 
 type Props = {
   title: string;
   fields: FieldConfig[];
   initialValues?: Record<string, unknown>;
+  relationOptions?: Record<string, RelationOption[]>;
   submitLabel?: string;
   cancelHref?: string;
-  action: (formData: FormData) => Promise<void>;
+  action: (
+    previousState: FormActionState,
+    formData: FormData,
+  ) => Promise<FormActionState>;
 };
 
 export function SmartForm({
   title,
   fields,
   initialValues = {},
+  relationOptions = {},
   submitLabel = "Save",
   cancelHref,
   action,
 }: Props) {
+  const [state, formAction, isPending] = useActionState(action, {});
+
   return (
     <section className="sb-page sb-page-narrow">
       <div className="sb-page-header">
@@ -157,10 +199,22 @@ export function SmartForm({
           <h1 className="sb-page-title">{title}</h1>
         </div>
       </div>
-      <form action={action} className="sb-card sb-form">
+      <form action={formAction} className="sb-card sb-form">
+        {state.error ? (
+          <p className="sb-form-error" role="alert">
+            {state.error}
+          </p>
+        ) : null}
         {fields.map((field) => {
           const value = initialValues[field.name];
-          if (field.widget.type === "select") {
+          if (
+            field.widget.type === "select" ||
+            field.widget.type === "relation"
+          ) {
+            const options =
+              field.widget.type === "select"
+                ? field.widget.options
+                : (relationOptions[field.name] ?? []);
             return (
               <label className="sb-form-field" key={field.name}>
                 <span className="sb-form-label">{field.label}</span>
@@ -171,7 +225,7 @@ export function SmartForm({
                   required={field.required}
                 >
                   <option value="" />
-                  {field.widget.options.map((option) => (
+                  {options.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -180,7 +234,10 @@ export function SmartForm({
               </label>
             );
           }
-          if (field.widget.type === "textarea") {
+          if (
+            field.widget.type === "textarea" ||
+            field.widget.type === "json"
+          ) {
             return (
               <label className="sb-form-field" key={field.name}>
                 <span className="sb-form-label">{field.label}</span>
@@ -195,6 +252,27 @@ export function SmartForm({
             );
           }
           if (field.widget.type === "checkbox") {
+            if (field.widget.nullable) {
+              return (
+                <label className="sb-form-field" key={field.name}>
+                  <span className="sb-form-label">{field.label}</span>
+                  <select
+                    className="sb-form-control sb-select"
+                    defaultValue={
+                      value === null || value === undefined
+                        ? ""
+                        : String(Boolean(value))
+                    }
+                    name={field.name}
+                    required={field.required}
+                  >
+                    <option value="">Not set</option>
+                    <option value="true">Yes</option>
+                    <option value="false">No</option>
+                  </select>
+                </label>
+              );
+            }
             return (
               <label
                 className="sb-form-field sb-checkbox-field"
@@ -205,7 +283,9 @@ export function SmartForm({
                   defaultChecked={Boolean(value)}
                   name={field.name}
                   type="checkbox"
+                  value="true"
                 />
+                <input name={field.name} type="hidden" value="false" />
                 <span className="sb-form-label">{field.label}</span>
               </label>
             );
@@ -215,6 +295,8 @@ export function SmartForm({
               ? "email"
               : field.widget.type === "password"
                 ? "password"
+              : field.widget.type === "number"
+                ? "number"
               : field.widget.type === "datetime"
                 ? "datetime-local"
                 : "text";
@@ -230,6 +312,11 @@ export function SmartForm({
                   field.widget.type === "password" ? "" : String(value ?? "")
                 }
                 name={field.name}
+                step={
+                  field.widget.type === "number"
+                    ? field.widget.step
+                    : undefined
+                }
                 required={
                   field.required &&
                   !(
@@ -243,8 +330,8 @@ export function SmartForm({
           );
         })}
         <div className="sb-form-actions">
-          <button className="sb-button" type="submit">
-            {submitLabel}
+          <button className="sb-button" disabled={isPending} type="submit">
+            {isPending ? "Saving..." : submitLabel}
           </button>
           {cancelHref ? (
             <a className="sb-button sb-button-secondary" href={cancelHref}>
@@ -254,6 +341,60 @@ export function SmartForm({
         </div>
       </form>
     </section>
+  );
+}
+`,
+    },
+    {
+      path: deleteButtonPath,
+      content: `"use client";
+
+import { useActionState } from "react";
+
+import type { FormActionState } from "${importPath(layout, deleteButtonPath, typesPath)}";
+
+type Props = {
+  action: (
+    previousState: FormActionState,
+    formData: FormData,
+  ) => Promise<FormActionState>;
+  idName: string;
+  idValue: string;
+  label?: string;
+};
+
+export function DeleteButton({
+  action,
+  idName,
+  idValue,
+  label = "Delete",
+}: Props) {
+  const [state, formAction, isPending] = useActionState(action, {});
+
+  return (
+    <form
+      action={formAction}
+      className="sb-delete-form"
+      onSubmit={(event) => {
+        if (!window.confirm("Delete this record? This cannot be undone.")) {
+          event.preventDefault();
+        }
+      }}
+    >
+      <input name={idName} type="hidden" value={idValue} />
+      <button
+        className="sb-button-danger"
+        disabled={isPending}
+        type="submit"
+      >
+        {isPending ? "Deleting..." : label}
+      </button>
+      {state.error ? (
+        <span className="sb-delete-error" role="alert">
+          {state.error}
+        </span>
+      ) : null}
+    </form>
   );
 }
 `,
@@ -552,6 +693,12 @@ body {
   text-decoration: none !important;
 }
 
+.sb-button:disabled,
+.sb-button-danger:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .sb-button-secondary {
   border-color: var(--sb-border);
   background: var(--sb-surface);
@@ -677,6 +824,17 @@ body {
   border-top: 1px solid var(--sb-border);
 }
 
+.sb-form-error {
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid #f0b4ae;
+  border-radius: 8px;
+  background: #fff4f2;
+  color: var(--sb-danger);
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .sb-login-shell {
   display: grid;
   min-height: 100vh;
@@ -744,6 +902,42 @@ body {
   padding: 13px 14px;
   border-bottom: 1px solid #edf0f3;
   vertical-align: middle;
+}
+
+.sb-table-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 5px 9px;
+  border: 1px solid var(--sb-border);
+  border-radius: 7px;
+  background: var(--sb-surface);
+  color: var(--sb-accent);
+  font-weight: 650;
+}
+
+.sb-table-action:hover {
+  border-color: #b9c2cc;
+  background: var(--sb-surface-muted);
+  text-decoration: none !important;
+}
+
+.sb-null-value {
+  color: var(--sb-muted);
+  font-style: italic;
+}
+
+.sb-delete-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sb-delete-error {
+  max-width: 240px;
+  color: var(--sb-danger);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .sb-table tbody tr:last-child td {

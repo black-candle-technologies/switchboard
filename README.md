@@ -217,6 +217,7 @@ src/switchboard/overrides.ts
 src/switchboard/auth.ts
 src/switchboard/auth-actions.ts
 src/components/form/SmartForm.tsx
+src/components/form/DeleteButton.tsx
 src/components/table/SimpleTable.tsx
 src/middleware.ts
 src/app/admin/switchboard.css
@@ -259,6 +260,47 @@ Use `--model` to limit generation to one Prisma model:
 ```bash
 npx @lanebucher/switchboard generate --model User --pages
 ```
+
+## Generated Runtime Support
+
+Generated forms currently map Prisma fields as follows:
+
+| Prisma field | Generated control |
+| --- | --- |
+| `String` | Text input, with email/password/long-text heuristics |
+| `Int`, `Float`, `Decimal`, `BigInt` | Number input |
+| `Boolean` | Checkbox; optional booleans use a Yes/No/Not set select |
+| Enum | Select using the schema enum values |
+| `DateTime` | `datetime-local` input |
+| `Json` | Multiline JSON textarea |
+| Optional scalar | Blank values become `null` |
+| Scalar with a default | Blank values allow Prisma to apply the default |
+
+List pages format dates, booleans, JSON, and null values, validate search/sort
+query parameters against generated field allowlists, clamp pagination to valid
+pages, and show distinct empty states for an empty resource and an empty search.
+
+For a relation such as
+`author User @relation(fields: [authorId], references: [id])`, Switchboard
+renders `authorId` as a select. Options use the referenced key as the value and
+prefer `name`, `title`, `label`, `email`, or `username` as the display field.
+List pages include that display field instead of showing only the raw foreign
+key.
+
+Generated create, update, and delete actions report common Prisma unique,
+foreign-key, and missing-record errors in the page. Failed form submissions
+remain on the form so browser-entered values are retained.
+
+Current runtime limitations:
+
+- Relations support selecting an existing related record only.
+- Nested create/update, many-to-many editors, scalar lists, and compound IDs
+  are not generated.
+- Relation option lists are loaded in full; autocomplete and remote lookup are
+  not generated yet.
+- `Bytes` fields do not receive a specialized upload control.
+- Generated validation is browser validation plus Prisma/server errors; domain
+  validation remains application code.
 
 ## Commands
 
