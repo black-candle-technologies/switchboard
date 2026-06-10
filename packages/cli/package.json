@@ -8,6 +8,8 @@
   },
   "files": [
     "bin/",
+    "src/",
+    "templates/",
     "README.md",
     "LICENSE"
   ],

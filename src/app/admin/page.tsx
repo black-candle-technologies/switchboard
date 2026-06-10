@@ -3,20 +3,30 @@ import { resources } from "@/switchboard/registry";
 
 export default function AdminIndex() {
   return (
-    <section className="space-y-4">
-      <h1 className="text-xl font-semibold">Admin</h1>
-      <ul className="space-y-2">
+    <section className="sb-page">
+      <div className="sb-page-header">
+        <div>
+          <p className="sb-eyebrow">Switchboard</p>
+          <h1 className="sb-page-title">Admin dashboard</h1>
+          <p className="sb-page-description">
+            Choose a resource to view and manage its records.
+          </p>
+        </div>
+      </div>
+      <div className="sb-dashboard-grid">
         {resources.map((r) => (
-          <li key={r.resource}>
-            <Link
-              className="underline"
-              href={"/admin/" + r.resource.toLowerCase() + "s"}
-            >
-              {r.displayName}
-            </Link>
-          </li>
+          <Link
+            className="sb-card sb-resource-card"
+            href={"/admin/" + r.resource.toLowerCase() + "s"}
+            key={r.resource}
+          >
+            <span className="sb-resource-card-title">{r.displayName}</span>
+            <span className="sb-resource-card-copy">
+              View and manage {r.displayName.toLowerCase()}.
+            </span>
+          </Link>
         ))}
-      </ul>
+      </div>
     </section>
   );
 }

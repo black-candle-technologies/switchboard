@@ -13,7 +13,8 @@ export default async function EditProjectPage({ params }: PageProps) {
   const existing = await prisma.project.findUnique({
     where: { id: id },
   });
-  if (!existing) return <p className="text-sm text-gray-500">Not found.</p>;
+  if (!existing)
+    return <div className="sb-card sb-empty-state">Record not found.</div>;
 
   async function update(formData: FormData) {
     "use server";

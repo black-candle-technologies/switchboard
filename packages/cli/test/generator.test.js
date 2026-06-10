@@ -15,7 +15,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
-import { generateProject } from "../bin/switchboard.js";
+import { generateProject } from "../src/generator/generateProject.js";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const cliPath = path.join(testDir, "..", "bin", "switchboard.js");

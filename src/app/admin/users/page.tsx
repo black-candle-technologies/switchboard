@@ -124,27 +124,30 @@ export default async function UserListPage({ searchParams }: PageProps) {
     const nextDir = active && sortDir === "asc" ? "desc" : "asc";
     const base = `/admin/users${qs({ page: 1, sort: key, dir: active ? nextDir : "asc" })}`;
     return (
-      <a href={base} className="hover:underline">
+      <a href={base} className="sb-action-link">
         {label ?? key}
-        {active ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+        {active ? (sortDir === "asc" ? " (asc)" : " (desc)") : ""}
       </a>
     );
   };
 
   return (
-    <section className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Users</h1>
-        <Link
-          href="/admin/users/new"
-          className="rounded bg-black px-3 py-2 text-sm font-medium text-white hover:bg-gray-800"
-        >
+    <section className="sb-page">
+      <div className="sb-page-header">
+        <div>
+          <p className="sb-eyebrow">Resource</p>
+          <h1 className="sb-page-title">Users</h1>
+          <p className="sb-page-description">
+            View, search, and manage user records.
+          </p>
+        </div>
+        <Link href="/admin/users/new" className="sb-button">
           + New
         </Link>
       </div>
 
       {/* Search */}
-      <form method="get" className="flex gap-2">
+      <form method="get" className="sb-search-form">
         <input
           type="text"
           name="q"
@@ -152,35 +155,32 @@ export default async function UserListPage({ searchParams }: PageProps) {
           placeholder={
             "Search " + (UserResource.list?.searchable ?? []).join(", ")
           }
-          className="w-72 rounded border px-3 py-2 text-sm"
+          className="sb-input"
         />
         <input type="hidden" name="sort" value={sortKey} />
         <input type="hidden" name="dir" value={sortDir} />
-        <button className="rounded border px-3 py-2 text-sm" type="submit">
+        <button className="sb-button sb-button-secondary" type="submit">
           Search
         </button>
       </form>
 
-      <div className="overflow-x-auto rounded border bg-white">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-gray-100">
+      <div className="sb-table-wrap">
+        <table className="sb-table">
+          <thead>
             <tr>
               {columns.map((c) => (
-                <th key={String(c.key)} className="px-3 py-2">
+                <th key={String(c.key)}>
                   {headerLink(String(c.key), c.header)}
                 </th>
               ))}
-              <th className="px-3 py-2"></th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {items.map((row) => (
-              <tr
-                key={String((row as unknown as Record<string, unknown>).id)}
-                className="border-t"
-              >
+              <tr key={String((row as unknown as Record<string, unknown>).id)}>
                 {columns.map((c) => (
-                  <td key={String(c.key)} className="px-3 py-2">
+                  <td key={String(c.key)}>
                     {c.cell
                       ? c.cell(row)
                       : String(
@@ -189,10 +189,10 @@ export default async function UserListPage({ searchParams }: PageProps) {
                         )}
                   </td>
                 ))}
-                <td className="px-3 py-2">
-                  <div className="flex gap-3">
+                <td>
+                  <div className="sb-actions">
                     <Link
-                      className="underline"
+                      className="sb-action-link"
                       href={
                         "/admin/users/" +
                         String((row as unknown as Record<string, unknown>).id) +
@@ -209,7 +209,7 @@ export default async function UserListPage({ searchParams }: PageProps) {
                           (row as unknown as Record<string, unknown>).id,
                         )}
                       />
-                      <button type="submit" className="text-red-600 underline">
+                      <button type="submit" className="sb-button-danger">
                         Delete
                       </button>
                     </form>
@@ -219,11 +219,8 @@ export default async function UserListPage({ searchParams }: PageProps) {
             ))}
             {items.length === 0 && (
               <tr>
-                <td
-                  className="px-3 py-6 text-center text-gray-500"
-                  colSpan={columns.length + 1}
-                >
-                  No records.
+                <td className="sb-empty-state" colSpan={columns.length + 1}>
+                  No records found.
                 </td>
               </tr>
             )}
@@ -232,19 +229,19 @@ export default async function UserListPage({ searchParams }: PageProps) {
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-gray-600">
+      <div className="sb-pagination">
+        <span>
           Page {page} of {totalPages}
         </span>
-        <div className="ml-auto flex gap-2">
+        <div className="sb-pagination-actions">
           <a
-            className={`rounded border px-3 py-1 text-sm ${page <= 1 ? "pointer-events-none opacity-50" : ""}`}
+            className={`sb-pagination-link ${page <= 1 ? "sb-is-disabled" : ""}`}
             href={qs({ page: Math.max(1, page - 1) })}
           >
             Prev
           </a>
           <a
-            className={`rounded border px-3 py-1 text-sm ${page >= totalPages ? "pointer-events-none opacity-50" : ""}`}
+            className={`sb-pagination-link ${page >= totalPages ? "sb-is-disabled" : ""}`}
             href={qs({ page: Math.min(totalPages, page + 1) })}
           >
             Next
