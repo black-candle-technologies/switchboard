@@ -11,29 +11,28 @@ From an existing Next.js App Router and Prisma project:
 
 ```bash
 npm install --save-dev @lanebucher/switchboard
+npx switchboard init
+npx switchboard generate --pages
+npm run dev
 ```
 
-Set the database connection in `.env`. For SQLite with the default schema
-location:
+Before generation, configure Prisma normally. For SQLite:
 
 ```dotenv
 DATABASE_URL="file:./dev.db"
 ```
 
-Create the database, generate the Prisma client, and run Switchboard:
+Create the database and generate the Prisma client:
 
 ```bash
 npx prisma migrate dev --schema src/prisma/schema.prisma
 npx prisma generate --schema src/prisma/schema.prisma
-npx switchboard generate --pages
-npm run dev
 ```
 
 Open `http://localhost:3000/admin`.
 
-Switchboard currently generates project source files rather than installing a
-complete runtime. Before generated pages compile, the project must provide the
-compatible support modules listed under [Generated Output](#generated-output).
+`init` supports projects using either `src/app` or root `app`, detects the
+standard Prisma schema locations, and verifies the project’s `@/*` path alias.
 
 ## Local Development
 
@@ -95,6 +94,7 @@ npm link
 Then run it from the root of a compatible Next.js project:
 
 ```bash
+switchboard init
 switchboard generate --pages
 ```
 
@@ -104,9 +104,28 @@ To test the published package without linking it globally:
 npx @lanebucher/switchboard generate --pages
 ```
 
-The defaults expect the Prisma schema at `src/prisma/schema.prisma`, write
-Switchboard files under `src/switchboard`, and write pages under
-`src/app/admin`.
+## Initialize A Project
+
+```bash
+switchboard init [options]
+```
+
+| Option | Description |
+| --- | --- |
+| `--schema <path>` | Use a custom Prisma schema path. |
+| `--app-dir <path>` | Use a custom App Router directory. |
+| `--force` | Overwrite existing Switchboard support files. |
+| `--dry-run` | Print planned changes without writing files. |
+
+By default, `init` preserves existing files. It creates the Prisma helper,
+Switchboard types/registry/overrides, form and table components, and the admin
+layout/index. It supports both `src`-based and root-based projects.
+
+## Generate Resources
+
+The generator prefers `src/prisma/schema.prisma` and `src/app`, then falls back
+to `prisma/schema.prisma` and root `app`. Switchboard output defaults to
+`src/switchboard` or root `switchboard` to match the detected layout.
 
 ```bash
 switchboard generate [options]
@@ -116,7 +135,8 @@ switchboard generate [options]
 | --- | --- |
 | `-m, --model <name>` | Generate only one Prisma model. |
 | `--schema <path>` | Schema path relative to the project root. |
-| `--out <path>` | Switchboard output root inside `src`. |
+| `--out <path>` | Switchboard output root inside the detected source root. |
+| `--app-dir <path>` | Use a custom App Router directory. |
 | `--pages` | Also generate App Router admin pages. |
 
 Example with custom paths:
@@ -129,11 +149,26 @@ npx switchboard generate \
 ```
 
 `--out` changes the resource and registry location. Admin pages remain under
-`src/app/admin`.
+the detected App Router directory’s `admin` folder.
 
 ## Generated Output
 
-`generate` always writes:
+`init` creates:
+
+```text
+src/lib/prisma.ts
+src/switchboard/types.ts
+src/switchboard/registry.ts
+src/switchboard/overrides.ts
+src/components/form/SmartForm.tsx
+src/components/table/SimpleTable.tsx
+src/app/admin/layout.tsx
+src/app/admin/page.tsx
+```
+
+Root `app` projects receive the same structure without the `src/` prefix.
+
+`generate` writes:
 
 ```text
 src/switchboard/generated/<Model>Resource.ts
@@ -150,15 +185,10 @@ src/app/admin/<models>/new/page.tsx
 src/app/admin/<models>/[id]/edit/page.tsx
 ```
 
-The current CLI generates project-specific files rather than installing a
-standalone admin framework. Generated pages import host-project modules such as
-`@/lib/prisma`, `@/components/form/SmartForm`,
-`@/components/table/SimpleTable`, and `@/switchboard/types`. A target project
-must provide compatible versions of those modules.
-
 Generated files belong to the project and can be edited. Re-running generation
 overwrites resource configs, the registry, admin list/new/edit pages, and the
-admin index. An existing `src/app/admin/layout.tsx` is preserved.
+admin index. Existing files are preserved by `init` unless `--force` is used.
+An existing admin layout is preserved by `generate`.
 
 Use `--model` to limit generation to one Prisma model:
 

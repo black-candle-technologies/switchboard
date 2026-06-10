@@ -9,7 +9,8 @@ Next.js App Router admin pages.
 
 - Node.js 18 or newer
 - A Next.js and Prisma project using TypeScript
-- A Prisma schema at `src/prisma/schema.prisma`
+- A Prisma schema at `src/prisma/schema.prisma` or `prisma/schema.prisma`
+- An `@/*` alias targeting the project’s source root
 
 ## Installation
 
@@ -29,25 +30,43 @@ DATABASE_URL="file:./dev.db"
 Then run:
 
 ```bash
-npx prisma migrate dev --schema src/prisma/schema.prisma
-npx prisma generate --schema src/prisma/schema.prisma
+npm install --save-dev @lanebucher/switchboard
+npx switchboard init
 npx switchboard generate --pages
 npm run dev
 ```
 
 Open `http://localhost:3000/admin`.
 
-The project must already have a `src/app` directory. Switchboard currently
-generates source files and expects compatible host-project support modules; see
-[Project Requirements](#project-requirements).
+Run the normal Prisma migration and client generation commands before starting
+the app. `init` supports both `src/app` and root `app` projects.
 
-## Usage
+## Init
+
+`init` creates the support files used by generated pages.
+
+| Option | Description |
+| --- | --- |
+| `--schema <path>` | Use a custom Prisma schema path. |
+| `--app-dir <path>` | Use a custom App Router directory. |
+| `--force` | Overwrite existing Switchboard support files. |
+| `--dry-run` | Show what would change without writing files. |
+
+Existing files are skipped by default.
+
+```bash
+npx switchboard init --dry-run
+npx switchboard init
+```
+
+## Generate
 
 | Option | Description |
 | --- | --- |
 | `-m, --model <modelName>` | Generate only the named Prisma model. |
 | `--schema <path>` | Prisma schema path relative to the project root. Defaults to `src/prisma/schema.prisma`. |
-| `--out <path>` | Switchboard output directory inside `src`. Defaults to `src/switchboard`. |
+| `--out <path>` | Switchboard output directory inside the detected source root. |
+| `--app-dir <path>` | Use a custom App Router directory. |
 | `--pages` | Also generate Next.js admin routes. |
 
 Without `--pages`, the CLI generates resource configs and updates the resource
@@ -62,56 +81,70 @@ npx switchboard generate --out src/admin-kit --pages
 ```
 
 `--out` relocates generated resource configs and the registry. Admin pages
-remain under `src/app/admin`. Custom output directories must stay inside `src`
-because generated files use the project’s `@/` import alias.
+remain under the detected App Router directory.
 
 ## Generated Files
 
+`init` creates:
+
 ```text
 src/
+|-- lib/prisma.ts
 |-- switchboard/
-|   |-- generated/
-|   |   |-- UserResource.ts
-|   |   `-- PostResource.ts
-|   `-- registry.ts
+|   |-- types.ts
+|   |-- registry.ts
+|   `-- overrides.ts
+|-- components/
+|   |-- form/SmartForm.tsx
+|   `-- table/SimpleTable.tsx
 `-- app/
     `-- admin/
         |-- layout.tsx
-        |-- page.tsx
-        `-- users/
-            |-- page.tsx
-            |-- new/
-            |   `-- page.tsx
-            `-- [id]/
-                `-- edit/
-                    `-- page.tsx
+        `-- page.tsx
 ```
 
-The `src/app/admin` files are generated only with `--pages`.
-`src/app/admin/layout.tsx` is preserved when it already exists; the other
-listed generated files are overwritten.
+Root `app` projects use `lib`, `switchboard`, and `components` at the project
+root. `generate --pages` then adds:
 
-Generated files are owned by the developer and can be edited. Be aware that
-running the generator again overwrites resource configs, the registry, admin
-list/new/edit pages, and the admin index.
+```text
+switchboard/generated/
+|-- UserResource.ts
+`-- PostResource.ts
+
+app/admin/
+|-- page.tsx
+`-- users/
+    |-- page.tsx
+    |-- new/page.tsx
+    `-- [id]/edit/page.tsx
+```
+
+For `src/app` projects, these paths are under `src/`.
+
+The admin layout is preserved by `generate` when it already exists. Other
+generated resource and page files are overwritten.
+
+Generated files are owned by the developer and can be edited. `init` skips
+existing files unless `--force` is provided.
 
 ## Project Requirements
 
-The generated code expects the target project to provide compatible modules at
-these import paths:
+`init` detects:
 
-- `@/lib/prisma`
-- `@/components/form/SmartForm`
-- `@/components/table/SimpleTable`
-- `@/switchboard/types`
-- `@/switchboard/overrides`
+- `src/app` or root `app`
+- `src/prisma/schema.prisma` or `prisma/schema.prisma`
+- `tsconfig.json` or `jsconfig.json`
+- an `@/*` alias targeting `src` or the project root
 
-The package currently generates source files only; it does not install those
-host-project modules or their dependencies.
+After `init`, generated code uses:
 
-When using `--out src/admin-kit`, the `types` and `overrides` modules must exist
-under `src/admin-kit`; page support modules such as `@/lib/prisma` and
-`@/components/form/SmartForm` keep their standard paths.
+```text
+@/lib/prisma
+@/components/form/SmartForm
+@/components/table/SimpleTable
+@/switchboard/types
+@/switchboard/overrides
+```
 
 Models used with `--pages` must have one explicit `String`, `Int`, or `BigInt`
 primary key. Compound IDs are rejected with an actionable error.

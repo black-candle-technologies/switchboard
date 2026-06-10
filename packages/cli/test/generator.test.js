@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { afterEach, test } from "node:test";
 import {
+  access,
   copyFile,
   mkdir,
   mkdtemp,
@@ -358,16 +359,17 @@ test("CLI rejects missing App Router and output paths outside src", async () => 
     (error) => {
       const stderr = stripAnsi(error.stderr);
       assert.match(stderr, /expected a Next\.js App Router directory/);
-      assert.match(stderr, /Create src\/app first/);
+      assert.match(stderr, /src\/app or app/);
       return true;
     },
   );
 
+  const srcProjectRoot = await createFixtureProject();
   await assert.rejects(
     execFileAsync(
       process.execPath,
       [cliPath, "generate", "--out", "generated-switchboard"],
-      { cwd: projectRoot },
+      { cwd: srcProjectRoot },
     ),
     (error) => {
       const stderr = stripAnsi(error.stderr);
@@ -378,23 +380,23 @@ test("CLI rejects missing App Router and output paths outside src", async () => 
   );
 });
 
-test("CLI rejects unsupported projects without a src directory", async () => {
+test("CLI supports root app projects without a src directory", async () => {
   const projectRoot = await createFixtureProject("basic", {
     createApp: false,
     schemaPath: "schema.prisma",
   });
+  await mkdir(path.join(projectRoot, "app"), { recursive: true });
 
-  await assert.rejects(
-    execFileAsync(
-      process.execPath,
-      [cliPath, "generate", "--schema", "schema.prisma"],
-      { cwd: projectRoot },
-    ),
-    (error) => {
-      const stderr = stripAnsi(error.stderr);
-      assert.match(stderr, /Unsupported project structure/);
-      assert.match(stderr, /expected a "src" directory/);
-      return true;
-    },
+  await execFileAsync(
+    process.execPath,
+    [cliPath, "generate", "--schema", "schema.prisma", "--pages"],
+    { cwd: projectRoot },
+  );
+
+  await access(
+    path.join(projectRoot, "app", "admin", "users", "page.tsx"),
+  );
+  await access(
+    path.join(projectRoot, "switchboard", "generated", "UserResource.ts"),
   );
 });

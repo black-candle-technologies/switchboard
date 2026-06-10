@@ -5,6 +5,7 @@ import fs from "fs-extra";
 import path from "path";
 import prettier from "prettier";
 import { fileURLToPath } from "url";
+import { initProject } from "./init-project.js";
 
 const program = new Command();
 
@@ -25,16 +26,60 @@ export async function generateProject({
   projectRoot = process.cwd(),
   model,
   pages = false,
-  schemaPath: schemaOption = "src/prisma/schema.prisma",
-  out = "src/switchboard",
+  schemaPath: schemaOption,
+  out,
+  appDir: appDirOption,
 } = {}) {
     const options = { model, pages };
     const resolvedProjectRoot = path.resolve(projectRoot);
-    const schemaPath = path.resolve(resolvedProjectRoot, schemaOption);
-    const srcDir = path.join(resolvedProjectRoot, "src");
-    const appDir = path.join(srcDir, "app");
-    const outDir = path.resolve(resolvedProjectRoot, out);
-    const relativeOutDir = path.relative(srcDir, outDir);
+    const srcAppDir = path.join(resolvedProjectRoot, "src", "app");
+    const rootAppDir = path.join(resolvedProjectRoot, "app");
+    const appDir = appDirOption
+      ? path.resolve(resolvedProjectRoot, appDirOption)
+      : fs.pathExistsSync(srcAppDir)
+        ? srcAppDir
+        : fs.pathExistsSync(rootAppDir)
+          ? rootAppDir
+          : undefined;
+    if (!appDir) {
+      throw new Error(
+        "Unsupported project structure: expected a Next.js App Router directory at src/app or app.",
+      );
+    }
+    if (!fs.pathExistsSync(appDir) || !fs.statSync(appDir).isDirectory()) {
+      throw new Error(
+        `Next.js App Router directory not found at "${appDir}".`,
+      );
+    }
+    const relativeAppDir = path.relative(resolvedProjectRoot, appDir);
+    if (
+      relativeAppDir === ".." ||
+      relativeAppDir.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relativeAppDir)
+    ) {
+      throw new Error("--app-dir must point to a directory inside the project.");
+    }
+    const srcRoot = path.join(resolvedProjectRoot, "src");
+    const relativeToSrc = path.relative(srcRoot, appDir);
+    const sourceRoot =
+      relativeToSrc !== ".." &&
+      !relativeToSrc.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relativeToSrc)
+        ? srcRoot
+        : resolvedProjectRoot;
+    const defaultSchemaPath = fs.pathExistsSync(
+      path.join(resolvedProjectRoot, "src", "prisma", "schema.prisma"),
+    )
+      ? path.join("src", "prisma", "schema.prisma")
+      : path.join("prisma", "schema.prisma");
+    const schemaPath = path.resolve(
+      resolvedProjectRoot,
+      schemaOption ?? defaultSchemaPath,
+    );
+    const outOption =
+      out ?? path.relative(resolvedProjectRoot, path.join(sourceRoot, "switchboard"));
+    const outDir = path.resolve(resolvedProjectRoot, outOption);
+    const relativeOutDir = path.relative(sourceRoot, outDir);
     const outImportPath = relativeOutDir.split(path.sep).join("/");
     const genDir = path.join(outDir, "generated");
 
@@ -44,11 +89,6 @@ export async function generateProject({
           "Pass --schema <path> relative to the project root if it is elsewhere.",
       );
     }
-    if (!fs.existsSync(srcDir) || !fs.statSync(srcDir).isDirectory()) {
-      throw new Error(
-        `Unsupported project structure: expected a "src" directory at "${srcDir}".`,
-      );
-    }
     if (
       relativeOutDir === "" ||
       relativeOutDir === ".." ||
@@ -56,17 +96,9 @@ export async function generateProject({
       path.isAbsolute(relativeOutDir)
     ) {
       throw new Error(
-        `Unsupported output path "${out}". --out must point to a directory inside "src" ` +
+        `Unsupported output path "${outOption}". --out must point inside ` +
+          `"${path.relative(resolvedProjectRoot, sourceRoot) || "."}" ` +
           "so generated @/ imports remain valid.",
-      );
-    }
-    if (
-      options.pages &&
-      (!fs.existsSync(appDir) || !fs.statSync(appDir).isDirectory())
-    ) {
-      throw new Error(
-        `Cannot generate admin pages: expected a Next.js App Router directory at "${appDir}". ` +
-          "Create src/app first, or run without --pages.",
       );
     }
 
@@ -801,19 +833,36 @@ ${fieldsForUI
 }
 
 program
+  .command("init")
+  .description("Create the support files required by Switchboard")
+  .option("--schema <path>", "Prisma schema path relative to the project root")
+  .option("--app-dir <path>", "Next.js App Router directory")
+  .option("--force", "Overwrite existing Switchboard support files")
+  .option("--dry-run", "Show planned changes without writing files")
+  .action(async (options) => {
+    await initProject({
+      projectRoot: process.cwd(),
+      schemaPath: options.schema,
+      appDir: options.appDir,
+      force: options.force,
+      dryRun: options.dryRun,
+      log: (message) => console.log(chalk.green(message)),
+    });
+  });
+
+program
   .command("generate")
   .description("Generate Switchboard resource configs and/or Next.js admin pages")
   .option("-m, --model <modelName>", "Generate a specific model only")
   .option(
     "--schema <path>",
-    "Prisma schema path relative to the project root",
-    "src/prisma/schema.prisma",
+    "Prisma schema path (defaults to src/prisma/schema.prisma, then prisma/schema.prisma)",
   )
   .option(
     "--out <path>",
-    "Switchboard output directory inside src",
-    "src/switchboard",
+    "Switchboard output directory (defaults to src/switchboard or switchboard)",
   )
+  .option("--app-dir <path>", "Custom Next.js App Router directory")
   .option("--pages", "Also generate Next.js pages for each resource")
   .action(async (options) => {
     await generateProject({
@@ -822,6 +871,7 @@ program
       pages: options.pages,
       schemaPath: options.schema,
       out: options.out,
+      appDir: options.appDir,
     });
   });
 
