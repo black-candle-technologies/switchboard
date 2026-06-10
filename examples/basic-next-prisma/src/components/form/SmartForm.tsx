@@ -83,17 +83,30 @@ export function SmartForm({
           const inputType =
             field.widget.type === "email"
               ? "email"
-              : field.widget.type === "datetime"
-                ? "datetime-local"
-                : "text";
+              : field.widget.type === "password"
+                ? "password"
+                : field.widget.type === "datetime"
+                  ? "datetime-local"
+                  : "text";
           return (
             <label className="sb-form-field" key={field.name}>
               <span className="sb-form-label">{field.label}</span>
               <input
                 className="sb-form-control"
-                defaultValue={String(value ?? "")}
+                autoComplete={
+                  field.widget.type === "password" ? "new-password" : undefined
+                }
+                defaultValue={
+                  field.widget.type === "password" ? "" : String(value ?? "")
+                }
                 name={field.name}
-                required={field.required}
+                required={
+                  field.required &&
+                  !(
+                    field.widget.type === "password" &&
+                    Object.keys(initialValues).length > 0
+                  )
+                }
                 type={inputType}
               />
             </label>

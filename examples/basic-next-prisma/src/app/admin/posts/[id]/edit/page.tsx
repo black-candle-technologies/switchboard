@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { SmartForm } from "@/components/form/SmartForm";
 import { PostResource } from "@/switchboard/generated/PostResource";
+
 import type { Prisma } from "@prisma/client";
 
 type PageProps = { params: Promise<{ id: string }> };

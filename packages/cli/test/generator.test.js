@@ -6,6 +6,7 @@ import {
   copyFile,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rm,
   writeFile,
@@ -36,6 +37,7 @@ async function createFixtureProject(
   {
     createApp = true,
     schemaPath = path.join("src", "prisma", "schema.prisma"),
+    aliasTarget = "./src/*",
   } = {},
 ) {
   const projectRoot = await mkdtemp(
@@ -51,6 +53,18 @@ async function createFixtureProject(
   );
   if (createApp) {
     await mkdir(path.join(projectRoot, "src", "app"), { recursive: true });
+  }
+  if (aliasTarget) {
+    await writeFile(
+      path.join(projectRoot, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          baseUrl: ".",
+          paths: { "@/*": [aliasTarget] },
+        },
+      }),
+      "utf8",
+    );
   }
 
   return projectRoot;
@@ -110,6 +124,7 @@ test("generates separate User list, create, and edit routes", async () => {
   assert.match(newPage, /async function create\(formData: FormData\)/);
   assert.match(newPage, /Prisma\.UserUncheckedCreateInput/);
   assert.match(newPage, /await prisma\.user\.create\(\{ data \}\)/);
+  assert.match(newPage, /passwordHash: await hashPassword/);
   assert.match(newPage, /<SmartForm/);
   assert.match(newPage, /submitLabel="Create"/);
   assert.doesNotMatch(newPage, /UserListPage/);
@@ -121,6 +136,8 @@ test("generates separate User list, create, and edit routes", async () => {
   assert.match(editPage, /params: Promise<\{ id: string \}>/);
   assert.match(editPage, /const routeParams = await params/);
   assert.match(editPage, /Prisma\.UserUncheckedUpdateInput/);
+  assert.match(editPage, /await hashPassword/);
+  assert.match(editPage, /\["password", "passwordHash"\]\.includes\(key\)/);
   assert.match(editPage, /await prisma\.user\.update/);
   assert.doesNotMatch(editPage, /UserListPage|searchParams|findMany/);
 });
@@ -147,6 +164,11 @@ test("generates enum fields and related-model routes without a database", async 
 
   assert.match(userResource, /"ADMIN"/);
   assert.match(userResource, /"USER"/);
+  assert.match(userResource, /type: "password"/);
+  assert.doesNotMatch(
+    userResource,
+    /columns:\s*\[[\s\S]*key: "passwordHash"/,
+  );
   assert.doesNotMatch(userResource, /name: "posts"/);
 
   assert.match(postNewPage, /export default function NewPostPage/);
@@ -323,8 +345,8 @@ test("CLI gives actionable errors for missing and invalid schemas", async () => 
     ),
     (error) => {
       const stderr = stripAnsi(error.stderr);
-      assert.match(stderr, /Prisma schema not found/);
-      assert.match(stderr, /Pass --schema <path>/);
+      assert.match(stderr, /Invalid --schema "missing\/schema\.prisma"/);
+      assert.match(stderr, /no Prisma schema file exists/);
       return true;
     },
   );
@@ -362,8 +384,8 @@ test("CLI rejects missing App Router and output paths outside src", async () => 
     }),
     (error) => {
       const stderr = stripAnsi(error.stderr);
-      assert.match(stderr, /expected a Next\.js App Router directory/);
-      assert.match(stderr, /src\/app or app/);
+      assert.match(stderr, /No Next\.js App Router directory found/);
+      assert.match(stderr, /Expected src\/app or app/);
       return true;
     },
   );
@@ -388,6 +410,7 @@ test("CLI supports root app projects without a src directory", async () => {
   const projectRoot = await createFixtureProject("basic", {
     createApp: false,
     schemaPath: "schema.prisma",
+    aliasTarget: "./*",
   });
   await mkdir(path.join(projectRoot, "app"), { recursive: true });
 
@@ -402,5 +425,242 @@ test("CLI supports root app projects without a src directory", async () => {
   );
   await access(
     path.join(projectRoot, "switchboard", "generated", "UserResource.ts"),
+  );
+});
+
+test("generate --dry-run reports planned actions and writes nothing", async () => {
+  const projectRoot = await createFixtureProject();
+
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    [cliPath, "generate", "--pages", "--dry-run"],
+    { cwd: projectRoot },
+  );
+
+  assert.match(stdout, /Detected project structure:/);
+  assert.match(stdout, /Output directory: src\/switchboard/);
+  assert.match(
+    stdout,
+    /Would create src\/switchboard\/generated\/UserResource\.ts/,
+  );
+  assert.match(
+    stdout,
+    /Would create src\/app\/admin\/users\/page\.tsx/,
+  );
+  await assert.rejects(
+    access(
+      path.join(
+        projectRoot,
+        "src",
+        "switchboard",
+        "generated",
+        "UserResource.ts",
+      ),
+    ),
+  );
+  await assert.rejects(
+    access(
+      path.join(projectRoot, "src", "app", "admin", "users", "page.tsx"),
+    ),
+  );
+});
+
+test("generate protects existing resource and page files unless forced", async () => {
+  const projectRoot = await createFixtureProject();
+  await generateProject({ projectRoot, pages: true });
+
+  const resourcePath = path.join(
+    projectRoot,
+    "src",
+    "switchboard",
+    "generated",
+    "UserResource.ts",
+  );
+  const pagePath = path.join(
+    projectRoot,
+    "src",
+    "app",
+    "admin",
+    "users",
+    "page.tsx",
+  );
+
+  const unchangedRun = await execFileAsync(
+    process.execPath,
+    [cliPath, "generate", "--pages"],
+    { cwd: projectRoot },
+  );
+  assert.match(
+    unchangedRun.stdout,
+    /Unchanged src\/switchboard\/generated\/UserResource\.ts/,
+  );
+  assert.match(
+    unchangedRun.stdout,
+    /Unchanged src\/app\/admin\/users\/page\.tsx/,
+  );
+
+  await writeFile(resourcePath, "// user resource edit\n", "utf8");
+  await writeFile(pagePath, "// user page edit\n", "utf8");
+
+  const protectedRun = await execFileAsync(
+    process.execPath,
+    [cliPath, "generate", "--pages"],
+    { cwd: projectRoot },
+  );
+  assert.equal(await readFile(resourcePath, "utf8"), "// user resource edit\n");
+  assert.equal(await readFile(pagePath, "utf8"), "// user page edit\n");
+  assert.match(
+    protectedRun.stdout,
+    /Skipped src\/switchboard\/generated\/UserResource\.ts because it already exists; use --force to overwrite/,
+  );
+  assert.match(
+    protectedRun.stdout,
+    /Skipped src\/app\/admin\/users\/page\.tsx because it already exists; use --force to overwrite/,
+  );
+
+  const forcedDryRun = await execFileAsync(
+    process.execPath,
+    [cliPath, "generate", "--pages", "--force", "--dry-run"],
+    { cwd: projectRoot },
+  );
+  assert.equal(await readFile(resourcePath, "utf8"), "// user resource edit\n");
+  assert.equal(await readFile(pagePath, "utf8"), "// user page edit\n");
+  assert.match(
+    forcedDryRun.stdout,
+    /Would overwrite src\/switchboard\/generated\/UserResource\.ts/,
+  );
+  assert.match(
+    forcedDryRun.stdout,
+    /Would overwrite src\/app\/admin\/users\/page\.tsx/,
+  );
+
+  const forcedRun = await execFileAsync(
+    process.execPath,
+    [cliPath, "generate", "--pages", "--force"],
+    { cwd: projectRoot },
+  );
+  assert.match(
+    await readFile(resourcePath, "utf8"),
+    /Generated by Switchboard\. You may edit this file\./,
+  );
+  assert.match(
+    await readFile(pagePath, "utf8"),
+    /Generated by Switchboard\. You may edit this file\./,
+  );
+  assert.match(
+    forcedRun.stdout,
+    /Overwrote src\/switchboard\/generated\/UserResource\.ts/,
+  );
+  assert.match(
+    forcedRun.stdout,
+    /Overwrote src\/app\/admin\/users\/page\.tsx/,
+  );
+});
+
+test("generate updates a recognized registry but protects an ambiguous one", async () => {
+  const projectRoot = await createFixtureProject();
+  const registryPath = path.join(
+    projectRoot,
+    "src",
+    "switchboard",
+    "registry.ts",
+  );
+  await mkdir(path.dirname(registryPath), { recursive: true });
+  await writeFile(
+    registryPath,
+    'import type { ResourceConfig } from "@/switchboard/types";\n\nexport const resources: ResourceConfig[] = [];\n',
+    "utf8",
+  );
+
+  const generatedRun = await execFileAsync(
+    process.execPath,
+    [cliPath, "generate"],
+    { cwd: projectRoot },
+  );
+  assert.match(generatedRun.stdout, /Updated src\/switchboard\/registry\.ts/);
+  assert.match(
+    await readFile(registryPath, "utf8"),
+    /Generated by Switchboard\. This registry is updated by switchboard generate\./,
+  );
+
+  await writeFile(registryPath, "// custom registry\n", "utf8");
+  const protectedRun = await execFileAsync(
+    process.execPath,
+    [cliPath, "generate"],
+    { cwd: projectRoot },
+  );
+  assert.equal(await readFile(registryPath, "utf8"), "// custom registry\n");
+  assert.match(
+    protectedRun.stdout,
+    /Skipped src\/switchboard\/registry\.ts because it already exists; use --force to overwrite/,
+  );
+});
+
+test("generate protects custom admin shell files unless forced", async () => {
+  const projectRoot = await createFixtureProject();
+  const adminRoot = path.join(projectRoot, "src", "app", "admin");
+  const layoutPath = path.join(adminRoot, "layout.tsx");
+  const indexPath = path.join(adminRoot, "page.tsx");
+  await mkdir(adminRoot, { recursive: true });
+  await writeFile(layoutPath, "// custom admin layout\n", "utf8");
+  await writeFile(indexPath, "// custom admin index\n", "utf8");
+
+  const protectedRun = await execFileAsync(
+    process.execPath,
+    [cliPath, "generate", "--pages"],
+    { cwd: projectRoot },
+  );
+  assert.equal(await readFile(layoutPath, "utf8"), "// custom admin layout\n");
+  assert.equal(await readFile(indexPath, "utf8"), "// custom admin index\n");
+  assert.match(
+    protectedRun.stdout,
+    /Skipped src\/app\/admin\/layout\.tsx because it already exists; use --force to overwrite/,
+  );
+  assert.match(
+    protectedRun.stdout,
+    /Skipped src\/app\/admin\/page\.tsx because it already exists; use --force to overwrite/,
+  );
+
+  const forcedRun = await execFileAsync(
+    process.execPath,
+    [cliPath, "generate", "--pages", "--force"],
+    { cwd: projectRoot },
+  );
+  assert.match(
+    await readFile(layoutPath, "utf8"),
+    /Generated by Switchboard\. You may edit this file\./,
+  );
+  assert.match(
+    await readFile(indexPath, "utf8"),
+    /Generated by Switchboard\. You may edit this file\./,
+  );
+  assert.match(
+    forcedRun.stdout,
+    /Overwrote src\/app\/admin\/layout\.tsx/,
+  );
+  assert.match(forcedRun.stdout, /Overwrote src\/app\/admin\/page\.tsx/);
+});
+
+test("generate does not create environment or database files", async () => {
+  const projectRoot = await createFixtureProject();
+  await generateProject({ projectRoot, pages: true });
+
+  const files = [];
+  async function collect(directory) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const entryPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await collect(entryPath);
+      } else {
+        files.push(path.relative(projectRoot, entryPath).replaceAll("\\", "/"));
+      }
+    }
+  }
+  await collect(projectRoot);
+
+  assert.equal(files.some((file) => path.basename(file) === ".env"), false);
+  assert.equal(
+    files.some((file) => /\.(?:db|sqlite|sqlite3)$/.test(file)),
+    false,
   );
 });
