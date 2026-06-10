@@ -1,0 +1,32 @@
+import Link from "next/link";
+import { resources } from "@/switchboard/registry";
+
+export default function AdminIndex() {
+  return (
+    <section className="sb-page">
+      <div className="sb-page-header">
+        <div>
+          <p className="sb-eyebrow">Switchboard</p>
+          <h1 className="sb-page-title">Admin dashboard</h1>
+          <p className="sb-page-description">
+            Choose a resource to view and manage its records.
+          </p>
+        </div>
+      </div>
+      <div className="sb-dashboard-grid">
+        {resources.map((r) => (
+          <Link
+            className="sb-card sb-resource-card"
+            href={"/admin/" + r.resource.toLowerCase() + "s"}
+            key={r.resource}
+          >
+            <span className="sb-resource-card-title">{r.displayName}</span>
+            <span className="sb-resource-card-copy">
+              View and manage {r.displayName.toLowerCase()}.
+            </span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}

@@ -16,6 +16,10 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --test packages/cli/test/*.test.js",
+    "example:install": "npm --prefix examples/basic-next-prisma install",
+    "example:generate": "npm --prefix examples/basic-next-prisma run switchboard:init && npm --prefix examples/basic-next-prisma run switchboard:generate",
+    "example:build": "npm --prefix examples/basic-next-prisma run build",
+    "example:smoke": "node examples/basic-next-prisma/scripts/smoke.mjs",
     "db:migrate": "prisma migrate dev --name init --schema src/prisma/schema.prisma",
     "db:seed": "prisma db seed --schema src/prisma/schema.prisma",
     "db:generate": "prisma generate --schema src/prisma/schema.prisma"

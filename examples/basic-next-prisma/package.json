@@ -1,0 +1,31 @@
+{
+  "name": "switchboard-basic-next-prisma-example",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev --name init",
+    "switchboard:init": "switchboard init",
+    "switchboard:generate": "switchboard generate --pages"
+  },
+  "prisma": {
+    "schema": "src/prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.16.3",
+    "next": "^15.5.19",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@lanebucher/switchboard": "file:../../packages/cli",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "prisma": "^6.16.3",
+    "typescript": "^5"
+  }
+}

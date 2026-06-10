@@ -1,0 +1,55 @@
+import { prisma } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { SmartForm } from "@/components/form/SmartForm";
+import { UserResource } from "@/switchboard/generated/UserResource";
+import type { Prisma } from "@prisma/client";
+
+type PageProps = { params: Promise<{ id: string }> };
+
+export default async function EditUserPage({ params }: PageProps) {
+  const routeParams = await params;
+  const id = routeParams.id;
+  const existing = await prisma.user.findUnique({
+    where: { id: id },
+  });
+  if (!existing)
+    return <div className="sb-card sb-empty-state">Record not found.</div>;
+
+  async function update(formData: FormData) {
+    "use server";
+    const data: Prisma.UserUncheckedUpdateInput = {
+      name: String(formData.get("name") ?? ""),
+      email: String(formData.get("email") ?? ""),
+      role: formData.get("role")
+        ? (String(
+            formData.get("role") ?? "",
+          ) as Prisma.UserUncheckedUpdateInput["role"])
+        : undefined,
+    };
+    await prisma.user.update({
+      where: { id: id },
+      data,
+    });
+    revalidatePath("/admin/users");
+    redirect("/admin/users");
+  }
+
+  const initialValues = Object.fromEntries(
+    Object.entries(existing).map(([key, value]) => [
+      key,
+      value instanceof Date ? value.toISOString().slice(0, 16) : value,
+    ]),
+  );
+
+  return (
+    <SmartForm
+      title="Edit User"
+      fields={UserResource.fields}
+      initialValues={initialValues}
+      submitLabel="Save"
+      cancelHref="/admin/users"
+      action={update}
+    />
+  );
+}

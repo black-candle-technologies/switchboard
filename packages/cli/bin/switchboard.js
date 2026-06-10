@@ -495,89 +495,93 @@ const listPage = `
       const nextDir = active && sortDir === "asc" ? "desc" : "asc";
       const base = \`/admin/${plural}\${qs({ page: 1, sort: key, dir: active ? nextDir : "asc" })}\`;
       return (
-        <a href={base} className="hover:underline">
+        <a href={base} className="sb-action-link">
           {label ?? key}
-          {active ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+          {active ? (sortDir === "asc" ? " (asc)" : " (desc)") : ""}
         </a>
       );
     };
 
     return (
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold">${model.name}s</h1>
+      <section className="sb-page">
+        <div className="sb-page-header">
+          <div>
+            <p className="sb-eyebrow">Resource</p>
+            <h1 className="sb-page-title">${model.name}s</h1>
+            <p className="sb-page-description">View, search, and manage ${model.name.toLowerCase()} records.</p>
+          </div>
           <Link
             href="/admin/${plural}/new"
-            className="rounded bg-black px-3 py-2 text-sm font-medium text-white hover:bg-gray-800"
+            className="sb-button"
           >
             + New
           </Link>
         </div>
 
         {/* Search */}
-        <form method="get" className="flex gap-2">
+        <form method="get" className="sb-search-form">
           <input
             type="text"
             name="q"
             defaultValue={q}
             placeholder={"Search " + (${model.name}Resource.list?.searchable ?? []).join(", ")}
-            className="w-72 rounded border px-3 py-2 text-sm"
+            className="sb-input"
           />
           <input type="hidden" name="sort" value={sortKey} />
           <input type="hidden" name="dir" value={sortDir} />
-          <button className="rounded border px-3 py-2 text-sm" type="submit">Search</button>
+          <button className="sb-button sb-button-secondary" type="submit">Search</button>
         </form>
 
-        <div className="overflow-x-auto rounded border bg-white">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-gray-100">
+        <div className="sb-table-wrap">
+          <table className="sb-table">
+            <thead>
               <tr>
                 {columns.map((c) => (
-                  <th key={String(c.key)} className="px-3 py-2">
+                  <th key={String(c.key)}>
                     {headerLink(String(c.key), c.header)}
                   </th>
                 ))}
-                <th className="px-3 py-2"></th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {items.map((row) => (
-                <tr key={String((row as unknown as Record<string, unknown>).${idName})} className="border-t">
+                <tr key={String((row as unknown as Record<string, unknown>).${idName})}>
                   {columns.map((c) => (
-                    <td key={String(c.key)} className="px-3 py-2">
+                    <td key={String(c.key)}>
                       {c.cell ? c.cell(row) : String((row as unknown as Record<string, unknown>)[c.key] ?? "")}
                     </td>
                   ))}
-                  <td className="px-3 py-2">
-                    <div className="flex gap-3">
-                      <Link className="underline" href={"/admin/${plural}/" + String((row as unknown as Record<string, unknown>).${idName}) + "/edit"}>Edit</Link>
+                  <td>
+                    <div className="sb-actions">
+                      <Link className="sb-action-link" href={"/admin/${plural}/" + String((row as unknown as Record<string, unknown>).${idName}) + "/edit"}>Edit</Link>
                       <form action={del}>
                         <input type="hidden" name="${idName}" value={String((row as unknown as Record<string, unknown>).${idName})} />
-                        <button type="submit" className="text-red-600 underline">Delete</button>
+                        <button type="submit" className="sb-button-danger">Delete</button>
                       </form>
                     </div>
                   </td>
                 </tr>
               ))}
               {items.length === 0 && (
-                <tr><td className="px-3 py-6 text-center text-gray-500" colSpan={columns.length + 1}>No records.</td></tr>
+                <tr><td className="sb-empty-state" colSpan={columns.length + 1}>No records found.</td></tr>
               )}
             </tbody>
           </table>
         </div>
 
                 {/* Pagination */}
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-600">Page {page} of {totalPages}</span>
-          <div className="ml-auto flex gap-2">
+        <div className="sb-pagination">
+          <span>Page {page} of {totalPages}</span>
+          <div className="sb-pagination-actions">
             <a
-              className={\`rounded border px-3 py-1 text-sm \${page <= 1 ? "pointer-events-none opacity-50" : ""}\`}
+              className={\`sb-pagination-link \${page <= 1 ? "sb-is-disabled" : ""}\`}
               href={qs({ page: Math.max(1, page - 1) })}
             >
               Prev
             </a>
             <a
-              className={\`rounded border px-3 py-1 text-sm \${page >= totalPages ? "pointer-events-none opacity-50" : ""}\`}
+              className={\`sb-pagination-link \${page >= totalPages ? "sb-is-disabled" : ""}\`}
               href={qs({ page: Math.min(totalPages, page + 1) })}
             >
               Next
@@ -646,7 +650,7 @@ ${fieldsForUI
           const existing = await prisma.${model.name.toLowerCase()}.findUnique({
             where: { ${idName}: id }
           });
-          if (!existing) return <p className="text-sm text-gray-500">Not found.</p>;
+          if (!existing) return <div className="sb-card sb-empty-state">Record not found.</div>;
 
           async function update(formData: FormData) {
             "use server";
@@ -757,29 +761,27 @@ ${fieldsForUI
       await fs.ensureDir(adminRoot);
 
       const layout = `
+        import "./switchboard.css";
         import Link from "next/link";
         import { resources } from "@/${outImportPath}/registry";
 
         export default function AdminLayout({ children }: { children: React.ReactNode }) {
           return (
-            <div className="min-h-screen bg-gray-50 text-gray-900">
-              <header className="border-b bg-white">
-                <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-                  <Link href="/" className="font-semibold">Switchboard</Link>
-                  <div className="space-x-4">
-                    <Link href="/admin" className="text-sm hover:underline">Admin</Link>
-                  </div>
+            <div className="sb-admin-shell">
+              <header className="sb-admin-header">
+                <nav className="sb-admin-nav">
+                  <Link href="/admin" className="sb-admin-brand">Switchboard</Link>
+                  <Link href="/" className="sb-admin-home-link">Back to site</Link>
                 </nav>
               </header>
-              <main className="mx-auto max-w-6xl px-4 py-6">
-                <div className="grid grid-cols-12 gap-6">
-                  <aside className="col-span-3">
-                    <nav className="rounded border bg-white p-3">
-                      <h2 className="mb-2 text-sm font-semibold text-gray-700">Resources</h2>
-                      <ul className="space-y-2">
+              <main className="sb-admin-main">
+                  <aside className="sb-admin-sidebar">
+                    <nav className="sb-resource-nav" aria-label="Admin resources">
+                      <h2 className="sb-resource-nav-title">Resources</h2>
+                      <ul className="sb-resource-list">
                         {resources.map((r) => (
                           <li key={r.resource}>
-                            <Link className="hover:underline" href={"/admin/" + r.resource.toLowerCase() + "s"}>
+                            <Link className="sb-resource-link" href={"/admin/" + r.resource.toLowerCase() + "s"}>
                               {r.displayName}
                             </Link>
                           </li>
@@ -787,8 +789,7 @@ ${fieldsForUI
                       </ul>
                     </nav>
                   </aside>
-                  <section className="col-span-9">{children}</section>
-                </div>
+                  <section className="sb-admin-content">{children}</section>
               </main>
             </div>
           );
@@ -802,17 +803,26 @@ ${fieldsForUI
 
         export default function AdminIndex() {
           return (
-            <section className="space-y-4">
-              <h1 className="text-xl font-semibold">Admin</h1>
-              <ul className="space-y-2">
+            <section className="sb-page">
+              <div className="sb-page-header">
+                <div>
+                  <p className="sb-eyebrow">Switchboard</p>
+                  <h1 className="sb-page-title">Admin dashboard</h1>
+                  <p className="sb-page-description">Choose a resource to view and manage its records.</p>
+                </div>
+              </div>
+              <div className="sb-dashboard-grid">
                 {resources.map((r) => (
-                  <li key={r.resource}>
-                    <Link className="underline" href={"/admin/" + r.resource.toLowerCase() + "s"}>
-                      {r.displayName}
-                    </Link>
-                  </li>
+                  <Link
+                    className="sb-card sb-resource-card"
+                    href={"/admin/" + r.resource.toLowerCase() + "s"}
+                    key={r.resource}
+                  >
+                    <span className="sb-resource-card-title">{r.displayName}</span>
+                    <span className="sb-resource-card-copy">View and manage {r.displayName.toLowerCase()}.</span>
+                  </Link>
                 ))}
-              </ul>
+              </div>
             </section>
           );
         }
@@ -875,9 +885,10 @@ program
     });
   });
 
+const cliPath = fileURLToPath(import.meta.url);
 const isDirectRun =
   process.argv[1] &&
-  path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+  fs.realpathSync(process.argv[1]) === fs.realpathSync(cliPath);
 
 if (isDirectRun) {
   try {

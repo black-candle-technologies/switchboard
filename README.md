@@ -34,6 +34,18 @@ Open `http://localhost:3000/admin`.
 `init` supports projects using either `src/app` or root `app`, detects the
 standard Prisma schema locations, and verifies the project’s `@/*` path alias.
 
+## Example App
+
+[`examples/basic-next-prisma`](examples/basic-next-prisma) is a standalone
+Next.js, Prisma, SQLite, and TypeScript app that uses the local CLI package the
+same way an outside project would.
+
+Run its complete install, migration, generation, and production build check:
+
+```bash
+npm run example:smoke
+```
+
 ## Local Development
 
 Requirements:
@@ -119,7 +131,9 @@ switchboard init [options]
 
 By default, `init` preserves existing files. It creates the Prisma helper,
 Switchboard types/registry/overrides, form and table components, and the admin
-layout/index. It supports both `src`-based and root-based projects.
+layout/index. It also creates `app/admin/switchboard.css`, a small
+framework-free stylesheet that can be edited or replaced. It supports both
+`src`-based and root-based projects.
 
 ## Generate Resources
 
@@ -162,6 +176,7 @@ src/switchboard/registry.ts
 src/switchboard/overrides.ts
 src/components/form/SmartForm.tsx
 src/components/table/SimpleTable.tsx
+src/app/admin/switchboard.css
 src/app/admin/layout.tsx
 src/app/admin/page.tsx
 ```

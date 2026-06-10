@@ -1,0 +1,37 @@
+import { prisma } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { SmartForm } from "@/components/form/SmartForm";
+import { PostResource } from "@/switchboard/generated/PostResource";
+import type { Prisma } from "@prisma/client";
+
+export default function NewPostPage() {
+  async function create(formData: FormData) {
+    "use server";
+    const data: Prisma.PostUncheckedCreateInput = {
+      title: String(formData.get("title") ?? ""),
+      content: formData.get("content")
+        ? String(formData.get("content") ?? "")
+        : null,
+      status: formData.get("status")
+        ? (String(
+            formData.get("status") ?? "",
+          ) as Prisma.PostUncheckedCreateInput["status"])
+        : undefined,
+      authorId: String(formData.get("authorId") ?? ""),
+    };
+    await prisma.post.create({ data });
+    revalidatePath("/admin/posts");
+    redirect("/admin/posts");
+  }
+
+  return (
+    <SmartForm
+      title="New Post"
+      fields={PostResource.fields}
+      submitLabel="Create"
+      cancelHref="/admin/posts"
+      action={create}
+    />
+  );
+}

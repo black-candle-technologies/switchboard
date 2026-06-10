@@ -244,7 +244,7 @@ export type ResourceConfig<T = unknown> = {
   displayName: string;
   fields: FieldConfig[];
   list?: ListConfig;
-};
+} & Record<never, T>;
 `,
     },
     {
@@ -302,17 +302,22 @@ export function SmartForm({
   action,
 }: Props) {
   return (
-    <section className="max-w-2xl space-y-4">
-      <h1 className="text-xl font-semibold">{title}</h1>
-      <form action={action} className="space-y-4 rounded border bg-white p-4">
+    <section className="sb-page sb-page-narrow">
+      <div className="sb-page-header">
+        <div>
+          <p className="sb-eyebrow">Resource editor</p>
+          <h1 className="sb-page-title">{title}</h1>
+        </div>
+      </div>
+      <form action={action} className="sb-card sb-form">
         {fields.map((field) => {
           const value = initialValues[field.name];
           if (field.widget.type === "select") {
             return (
-              <label className="block" key={field.name}>
-                <span className="text-sm font-medium">{field.label}</span>
+              <label className="sb-form-row" key={field.name}>
+                <span className="sb-label">{field.label}</span>
                 <select
-                  className="mt-1 w-full rounded border px-3 py-2"
+                  className="sb-input"
                   defaultValue={String(value ?? "")}
                   name={field.name}
                   required={field.required}
@@ -329,10 +334,10 @@ export function SmartForm({
           }
           if (field.widget.type === "textarea") {
             return (
-              <label className="block" key={field.name}>
-                <span className="text-sm font-medium">{field.label}</span>
+              <label className="sb-form-row" key={field.name}>
+                <span className="sb-label">{field.label}</span>
                 <textarea
-                  className="mt-1 w-full rounded border px-3 py-2"
+                  className="sb-input"
                   defaultValue={String(value ?? "")}
                   name={field.name}
                   required={field.required}
@@ -343,13 +348,14 @@ export function SmartForm({
           }
           if (field.widget.type === "checkbox") {
             return (
-              <label className="flex items-center gap-2" key={field.name}>
+              <label className="sb-checkbox-row" key={field.name}>
                 <input
+                  className="sb-checkbox"
                   defaultChecked={Boolean(value)}
                   name={field.name}
                   type="checkbox"
                 />
-                <span className="text-sm">{field.label}</span>
+                <span className="sb-label">{field.label}</span>
               </label>
             );
           }
@@ -360,10 +366,10 @@ export function SmartForm({
                 ? "datetime-local"
                 : "text";
           return (
-            <label className="block" key={field.name}>
-              <span className="text-sm font-medium">{field.label}</span>
+            <label className="sb-form-row" key={field.name}>
+              <span className="sb-label">{field.label}</span>
               <input
-                className="mt-1 w-full rounded border px-3 py-2"
+                className="sb-input"
                 defaultValue={String(value ?? "")}
                 name={field.name}
                 required={field.required}
@@ -372,15 +378,12 @@ export function SmartForm({
             </label>
           );
         })}
-        <div className="flex gap-2">
-          <button
-            className="rounded bg-black px-3 py-2 text-sm font-medium text-white"
-            type="submit"
-          >
+        <div className="sb-form-actions">
+          <button className="sb-button" type="submit">
             {submitLabel}
           </button>
           {cancelHref ? (
-            <a className="rounded border px-3 py-2 text-sm" href={cancelHref}>
+            <a className="sb-button sb-button-secondary" href={cancelHref}>
               Cancel
             </a>
           ) : null}
@@ -414,12 +417,12 @@ export function SimpleTable<T>({
   empty = "No records found.",
 }: Props<T>) {
   return (
-    <div className="overflow-x-auto rounded border bg-white">
-      <table className="w-full text-left text-sm">
-        <thead className="bg-gray-100">
+    <div className="sb-table-wrap">
+      <table className="sb-table">
+        <thead>
           <tr>
             {columns.map((column) => (
-              <th className="px-3 py-2" key={String(column.key)}>
+              <th key={String(column.key)}>
                 {column.header ?? String(column.key)}
               </th>
             ))}
@@ -427,9 +430,9 @@ export function SimpleTable<T>({
         </thead>
         <tbody>
           {rows.map((row, index) => (
-            <tr className="border-t" key={index}>
+            <tr key={index}>
               {columns.map((column) => (
-                <td className="px-3 py-2" key={String(column.key)}>
+                <td key={String(column.key)}>
                   {column.cell
                     ? column.cell(row)
                     : String(
@@ -444,7 +447,7 @@ export function SimpleTable<T>({
           {rows.length === 0 ? (
             <tr>
               <td
-                className="px-3 py-6 text-center text-gray-500"
+                className="sb-empty-state"
                 colSpan={columns.length}
               >
                 {empty}
@@ -459,8 +462,420 @@ export function SimpleTable<T>({
 `,
     },
     {
+      path: path.join(layout.appDir, "admin", "switchboard.css"),
+      content: `:root {
+  --sb-bg: #f4f6f8;
+  --sb-surface: #ffffff;
+  --sb-surface-muted: #f8fafc;
+  --sb-border: #dfe4ea;
+  --sb-text: #17202a;
+  --sb-muted: #64748b;
+  --sb-accent: #1d4ed8;
+  --sb-accent-hover: #1e40af;
+  --sb-danger: #b42318;
+  --sb-radius: 10px;
+  --sb-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+body {
+  margin: 0;
+}
+
+.sb-admin-shell {
+  min-height: 100vh;
+  background: var(--sb-bg);
+  color: var(--sb-text);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  line-height: 1.5;
+}
+
+.sb-admin-shell *,
+.sb-admin-shell *::before,
+.sb-admin-shell *::after {
+  box-sizing: border-box;
+}
+
+.sb-admin-shell a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.sb-admin-header {
+  border-bottom: 1px solid var(--sb-border);
+  background: var(--sb-surface);
+}
+
+.sb-admin-nav,
+.sb-admin-main {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+}
+
+.sb-admin-nav {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.sb-admin-brand {
+  font-size: 18px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.sb-admin-home-link,
+.sb-action-link,
+.sb-table a {
+  color: var(--sb-accent);
+  font-weight: 600;
+}
+
+.sb-admin-home-link:hover,
+.sb-action-link:hover,
+.sb-table a:hover {
+  text-decoration: underline;
+}
+
+.sb-admin-main {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 28px;
+  padding: 28px 0 48px;
+}
+
+.sb-admin-sidebar {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+}
+
+.sb-resource-nav,
+.sb-card {
+  border: 1px solid var(--sb-border);
+  border-radius: var(--sb-radius);
+  background: var(--sb-surface);
+  box-shadow: var(--sb-shadow);
+}
+
+.sb-resource-nav {
+  padding: 16px;
+}
+
+.sb-resource-nav-title,
+.sb-eyebrow {
+  margin: 0 0 8px;
+  color: var(--sb-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sb-resource-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sb-resource-link {
+  display: block;
+  padding: 9px 10px;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sb-resource-link:hover {
+  background: var(--sb-surface-muted);
+  color: var(--sb-accent);
+}
+
+.sb-admin-content,
+.sb-page {
+  min-width: 0;
+}
+
+.sb-page {
+  display: grid;
+  gap: 18px;
+}
+
+.sb-page-narrow {
+  max-width: 720px;
+}
+
+.sb-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.sb-page-title {
+  margin: 0;
+  font-size: clamp(24px, 3vw, 32px);
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+}
+
+.sb-page-description {
+  margin: 6px 0 0;
+  color: var(--sb-muted);
+}
+
+.sb-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 16px;
+}
+
+.sb-resource-card {
+  display: block;
+  padding: 20px;
+  transition:
+    border-color 150ms ease,
+    transform 150ms ease;
+}
+
+.sb-resource-card:hover {
+  border-color: #9fb7e8;
+  transform: translateY(-1px);
+}
+
+.sb-resource-card-title {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.sb-resource-card-copy {
+  color: var(--sb-muted);
+  font-size: 14px;
+}
+
+.sb-button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  border: 1px solid var(--sb-accent);
+  border-radius: 8px;
+  background: var(--sb-accent);
+  color: #ffffff !important;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sb-button:hover {
+  border-color: var(--sb-accent-hover);
+  background: var(--sb-accent-hover);
+  text-decoration: none !important;
+}
+
+.sb-button-secondary {
+  border-color: var(--sb-border);
+  background: var(--sb-surface);
+  color: var(--sb-text) !important;
+}
+
+.sb-button-secondary:hover {
+  border-color: #b9c2cc;
+  background: var(--sb-surface-muted);
+}
+
+.sb-button-danger {
+  border: 0;
+  background: transparent;
+  color: var(--sb-danger);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sb-button-danger:hover {
+  text-decoration: underline;
+}
+
+.sb-search-form,
+.sb-form-actions,
+.sb-actions,
+.sb-pagination {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sb-search-form {
+  max-width: 540px;
+}
+
+.sb-input {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 11px;
+  border: 1px solid #cbd3dc;
+  border-radius: 8px;
+  background: var(--sb-surface);
+  color: var(--sb-text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.sb-input:focus {
+  border-color: var(--sb-accent);
+  outline: 3px solid rgba(29, 78, 216, 0.14);
+}
+
+.sb-form {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+}
+
+.sb-form-row {
+  display: grid;
+  gap: 7px;
+}
+
+.sb-label {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.sb-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.sb-checkbox {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--sb-accent);
+}
+
+.sb-form-actions {
+  padding-top: 4px;
+}
+
+.sb-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--sb-border);
+  border-radius: var(--sb-radius);
+  background: var(--sb-surface);
+  box-shadow: var(--sb-shadow);
+}
+
+.sb-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 14px;
+}
+
+.sb-table th {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--sb-border);
+  background: var(--sb-surface-muted);
+  color: #475569;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sb-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid #edf0f3;
+  vertical-align: middle;
+}
+
+.sb-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.sb-table tbody tr:hover:not(:only-child) {
+  background: #fbfcfd;
+}
+
+.sb-empty-state {
+  padding: 42px 20px !important;
+  color: var(--sb-muted);
+  text-align: center;
+}
+
+.sb-pagination {
+  justify-content: space-between;
+  color: var(--sb-muted);
+  font-size: 14px;
+}
+
+.sb-pagination-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.sb-pagination-link {
+  padding: 7px 11px;
+  border: 1px solid var(--sb-border);
+  border-radius: 7px;
+  background: var(--sb-surface);
+  color: var(--sb-text);
+  font-weight: 600;
+}
+
+.sb-pagination-link:hover {
+  border-color: #b9c2cc;
+  background: var(--sb-surface-muted);
+}
+
+.sb-is-disabled {
+  pointer-events: none;
+  opacity: 0.45;
+}
+
+@media (max-width: 760px) {
+  .sb-admin-main {
+    grid-template-columns: 1fr;
+  }
+
+  .sb-admin-sidebar {
+    position: static;
+  }
+
+  .sb-resource-list {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+
+  .sb-page-header,
+  .sb-search-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sb-page-header .sb-button,
+  .sb-search-form .sb-button {
+    width: 100%;
+  }
+}
+`,
+    },
+    {
       path: path.join(layout.appDir, "admin", "layout.tsx"),
-      content: `import Link from "next/link";
+      content: `import "./switchboard.css";
+import Link from "next/link";
 import { resources } from "${switchboardImport}/registry";
 
 export default function AdminLayout({
@@ -469,27 +884,26 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
-      <header className="border-b bg-white">
-        <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link className="font-semibold" href="/">
+    <div className="sb-admin-shell">
+      <header className="sb-admin-header">
+        <nav className="sb-admin-nav">
+          <Link className="sb-admin-brand" href="/admin">
             Switchboard
           </Link>
-          <Link className="text-sm hover:underline" href="/admin">
-            Admin
+          <Link className="sb-admin-home-link" href="/">
+            Back to site
           </Link>
         </nav>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-6">
-        <div className="grid grid-cols-12 gap-6">
-          <aside className="col-span-3">
-            <nav className="rounded border bg-white p-3">
-              <h2 className="mb-2 text-sm font-semibold">Resources</h2>
-              <ul className="space-y-2">
+      <main className="sb-admin-main">
+          <aside className="sb-admin-sidebar">
+            <nav className="sb-resource-nav" aria-label="Admin resources">
+              <h2 className="sb-resource-nav-title">Resources</h2>
+              <ul className="sb-resource-list">
                 {resources.map((resource) => (
                   <li key={resource.resource}>
                     <Link
-                      className="hover:underline"
+                      className="sb-resource-link"
                       href={"/admin/" + resource.resource.toLowerCase() + "s"}
                     >
                       {resource.displayName}
@@ -499,8 +913,7 @@ export default function AdminLayout({
               </ul>
             </nav>
           </aside>
-          <section className="col-span-9">{children}</section>
-        </div>
+          <section className="sb-admin-content">{children}</section>
       </main>
     </div>
   );
@@ -514,25 +927,37 @@ import { resources } from "${switchboardImport}/registry";
 
 export default function AdminIndex() {
   return (
-    <section className="space-y-4">
-      <h1 className="text-xl font-semibold">Admin</h1>
+    <section className="sb-page">
+      <div className="sb-page-header">
+        <div>
+          <p className="sb-eyebrow">Switchboard</p>
+          <h1 className="sb-page-title">Admin dashboard</h1>
+          <p className="sb-page-description">
+            Choose a resource to view and manage its records.
+          </p>
+        </div>
+      </div>
       {resources.length ? (
-        <ul className="space-y-2">
+        <div className="sb-dashboard-grid">
           {resources.map((resource) => (
-            <li key={resource.resource}>
-              <Link
-                className="underline"
-                href={"/admin/" + resource.resource.toLowerCase() + "s"}
-              >
+            <Link
+              className="sb-card sb-resource-card"
+              href={"/admin/" + resource.resource.toLowerCase() + "s"}
+              key={resource.resource}
+            >
+              <span className="sb-resource-card-title">
                 {resource.displayName}
-              </Link>
-            </li>
+              </span>
+              <span className="sb-resource-card-copy">
+                View and manage {resource.displayName.toLowerCase()}.
+              </span>
+            </Link>
           ))}
-        </ul>
+        </div>
       ) : (
-        <p className="text-sm text-gray-600">
+        <div className="sb-card sb-empty-state">
           Run npx switchboard generate --pages to add resources.
-        </p>
+        </div>
       )}
     </section>
   );

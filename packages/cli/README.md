@@ -41,9 +41,25 @@ Open `http://localhost:3000/admin`.
 Run the normal Prisma migration and client generation commands before starting
 the app. `init` supports both `src/app` and root `app` projects.
 
+## Example App
+
+The repository includes a complete outsider-style example at
+[`examples/basic-next-prisma`](../../examples/basic-next-prisma). It contains
+`User` and `Post` models, SQLite setup, generated support files, and admin
+list/create/edit routes.
+
+From the repository root:
+
+```bash
+npm run example:smoke
+```
+
 ## Init
 
 `init` creates the support files used by generated pages.
+This includes `app/admin/switchboard.css`, a small plain-CSS admin theme with
+no styling dependency. The generated stylesheet belongs to the project and can
+be edited or replaced.
 
 | Option | Description |
 | --- | --- |
@@ -99,6 +115,7 @@ src/
 |   `-- table/SimpleTable.tsx
 `-- app/
     `-- admin/
+        |-- switchboard.css
         |-- layout.tsx
         `-- page.tsx
 ```

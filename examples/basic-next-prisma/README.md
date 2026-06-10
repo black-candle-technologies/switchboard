@@ -1,0 +1,64 @@
+# Basic Next.js + Prisma Example
+
+This is a minimal outsider-style project using Next.js App Router, Prisma,
+SQLite, TypeScript, and the local `@lanebucher/switchboard` package.
+
+## Setup
+
+From this directory:
+
+```bash
+npm install
+cp .env.example .env
+npx prisma migrate dev
+npx switchboard init
+npx switchboard generate --pages
+npm run dev
+```
+
+PowerShell:
+
+```powershell
+npm install
+Copy-Item .env.example .env
+npx prisma migrate dev
+npx switchboard init
+npx switchboard generate --pages
+npm run dev
+```
+
+Open:
+
+- `http://localhost:3000/admin`
+- `http://localhost:3000/admin/users`
+- `http://localhost:3000/admin/users/new`
+- `http://localhost:3000/admin/posts`
+- `http://localhost:3000/admin/posts/new`
+
+## Scripts
+
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Start the Next.js development server. |
+| `npm run build` | Build the example app. |
+| `npm run prisma:generate` | Generate Prisma Client. |
+| `npm run prisma:migrate` | Create/apply the local SQLite migration. |
+| `npm run switchboard:init` | Create Switchboard support files. |
+| `npm run switchboard:generate` | Generate resource configs and admin pages. |
+
+The Switchboard dependency uses `file:../../packages/cli`, so this example
+exercises the CLI package from this repository without publishing it first.
+
+Generated Switchboard files are checked in for inspection. Running `init`
+preserves them by default; running `generate --pages` refreshes generated
+resource and route files.
+
+The admin shell uses the generated `src/app/admin/switchboard.css` stylesheet.
+It is plain CSS with no framework dependency and can be edited or replaced.
+
+From the repository root, run the full install, migration, generation, and
+build validation with:
+
+```bash
+npm run example:smoke
+```

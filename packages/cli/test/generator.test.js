@@ -101,6 +101,10 @@ test("generates separate User list, create, and edit routes", async () => {
   assert.match(listPage, /searchParams: Promise<SearchParams>/);
   assert.match(listPage, /const params = await searchParams/);
   assert.match(listPage, /href="\/admin\/users\/new"/);
+  assert.match(listPage, /className="sb-page"/);
+  assert.match(listPage, /className="sb-table"/);
+  assert.match(listPage, /className="sb-empty-state"/);
+  assert.match(listPage, /className="sb-pagination"/);
 
   assert.match(newPage, /export default function NewUserPage/);
   assert.match(newPage, /async function create\(formData: FormData\)/);

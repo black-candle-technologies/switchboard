@@ -92,6 +92,7 @@ test("init creates support files in a src/app project", async () => {
     "src/switchboard/overrides.ts",
     "src/components/form/SmartForm.tsx",
     "src/components/table/SimpleTable.tsx",
+    "src/app/admin/switchboard.css",
     "src/app/admin/layout.tsx",
     "src/app/admin/page.tsx",
   ];
@@ -99,6 +100,19 @@ test("init creates support files in a src/app project", async () => {
     expectedFiles.map((file) => access(path.join(projectRoot, file))),
   );
   assert.match(stdout, /Created src\/lib\/prisma\.ts/);
+  const layout = await readFile(
+    path.join(projectRoot, "src", "app", "admin", "layout.tsx"),
+    "utf8",
+  );
+  const stylesheet = await readFile(
+    path.join(projectRoot, "src", "app", "admin", "switchboard.css"),
+    "utf8",
+  );
+  assert.match(layout, /import "\.\/switchboard\.css"/);
+  assert.match(layout, /className="sb-admin-shell"/);
+  assert.match(stylesheet, /\.sb-admin-shell/);
+  assert.match(stylesheet, /\.sb-table/);
+  assert.match(stylesheet, /\.sb-form/);
   assert.match(stdout, /Next: run npx switchboard generate --pages/);
 });
 
@@ -110,6 +124,7 @@ test("init creates support files in a root app project and generate still works"
 
   await access(path.join(projectRoot, "lib", "prisma.ts"));
   await access(path.join(projectRoot, "switchboard", "types.ts"));
+  await access(path.join(projectRoot, "app", "admin", "switchboard.css"));
   await access(path.join(projectRoot, "app", "admin", "users", "page.tsx"));
   const userPage = await readFile(
     path.join(projectRoot, "app", "admin", "users", "page.tsx"),
@@ -133,6 +148,50 @@ test("init skips existing files unless --force is used", async () => {
   assert.match(forced.stdout, /Overwrote src\/lib\/prisma\.ts/);
 });
 
+test("init preserves the admin stylesheet unless --force is used", async () => {
+  const projectRoot = await createProject();
+  const target = path.join(
+    projectRoot,
+    "src",
+    "app",
+    "admin",
+    "switchboard.css",
+  );
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, "/* user stylesheet */\n", "utf8");
+
+  const dryRunSkipped = await runCli(projectRoot, "init", "--dry-run");
+  assert.match(
+    dryRunSkipped.stdout,
+    /Skipped src\/app\/admin\/switchboard\.css because it already exists/,
+  );
+
+  const dryRunForced = await runCli(
+    projectRoot,
+    "init",
+    "--dry-run",
+    "--force",
+  );
+  assert.match(
+    dryRunForced.stdout,
+    /Would overwrite src\/app\/admin\/switchboard\.css/,
+  );
+
+  const skipped = await runCli(projectRoot, "init");
+  assert.equal(await readFile(target, "utf8"), "/* user stylesheet */\n");
+  assert.match(
+    skipped.stdout,
+    /Skipped src\/app\/admin\/switchboard\.css because it already exists/,
+  );
+
+  const forced = await runCli(projectRoot, "init", "--force");
+  assert.match(await readFile(target, "utf8"), /\.sb-admin-shell/);
+  assert.match(
+    forced.stdout,
+    /Overwrote src\/app\/admin\/switchboard\.css/,
+  );
+});
+
 test("init --dry-run writes nothing", async () => {
   const projectRoot = await createProject();
   const { stdout } = await runCli(projectRoot, "init", "--dry-run");
@@ -142,6 +201,7 @@ test("init --dry-run writes nothing", async () => {
     access(path.join(projectRoot, "src", "app", "admin", "page.tsx")),
   );
   assert.match(stdout, /Would create src\/lib\/prisma\.ts/);
+  assert.match(stdout, /Would create src\/app\/admin\/switchboard\.css/);
 });
 
 test("init supports custom schema and app directories", async () => {
