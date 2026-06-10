@@ -22,9 +22,9 @@ export default async function TaskListPage({ searchParams }: PageProps) {
     typeof params.sort === "string" ? params.sort : defaultSortKey;
   const sortDir =
     params.dir === "asc" || params.dir === "desc" ? params.dir : defaultSortDir;
-  const orderBy = (
-    sortKey ? { [sortKey]: sortDir } : { createdAt: "desc" }
-  ) as Prisma.TaskOrderByWithRelationInput;
+  const orderBy = (sortKey ? { [sortKey]: sortDir } : { createdAt: "desc" }) as
+    | Prisma.TaskOrderByWithRelationInput
+    | undefined;
 
   // Search
   const searchable = TaskResource.list?.searchable ?? [];

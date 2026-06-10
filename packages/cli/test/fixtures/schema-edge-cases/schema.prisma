@@ -1,0 +1,33 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountStatus {
+  ACTIVE   @map("active")
+  DISABLED @map("disabled")
+}
+
+model Account {
+  slug       String        @id @map("account_slug")
+  externalId String        @default(uuid()) @map("external_id")
+  nickname   String?
+  tags       String[]
+  status     AccountStatus @default(ACTIVE)
+  posts      Post[]
+
+  @@map("accounts")
+}
+
+model Post {
+  id          String  @id @default(cuid())
+  title       String
+  accountSlug String  @map("account_slug")
+  account     Account @relation(fields: [accountSlug], references: [slug])
+
+  @@map("posts")
+}

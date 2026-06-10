@@ -11,9 +11,11 @@ export default function NewUserPage() {
     const data: Prisma.UserUncheckedCreateInput = {
       name: String(formData.get("name") ?? ""),
       email: String(formData.get("email") ?? ""),
-      role: String(
-        formData.get("role") ?? "",
-      ) as Prisma.UserUncheckedCreateInput["role"],
+      role: formData.get("role")
+        ? (String(
+            formData.get("role") ?? "",
+          ) as Prisma.UserUncheckedCreateInput["role"])
+        : undefined,
     };
     await prisma.user.create({ data });
     revalidatePath("/admin/users");

@@ -22,9 +22,9 @@ export default async function PostListPage({ searchParams }: PageProps) {
     typeof params.sort === "string" ? params.sort : defaultSortKey;
   const sortDir =
     params.dir === "asc" || params.dir === "desc" ? params.dir : defaultSortDir;
-  const orderBy = (
-    sortKey ? { [sortKey]: sortDir } : { createdAt: "desc" }
-  ) as Prisma.PostOrderByWithRelationInput;
+  const orderBy = (sortKey ? { [sortKey]: sortDir } : { createdAt: "desc" }) as
+    | Prisma.PostOrderByWithRelationInput
+    | undefined;
 
   // Search
   const searchable = PostResource.list?.searchable ?? [];

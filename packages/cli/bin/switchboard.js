@@ -44,8 +44,9 @@ export async function generateProject({
     const enums = {};
     for (const [, name, body] of enumMatches) {
       const values = body
-        .split(/[\s,]+/g)
-        .map((v) => v.trim())
+        .split(/\r?\n/g)
+        .map((line) => line.replace(/\/\/.*$/, "").trim())
+        .map((line) => line.match(/^(\w+)\b/)?.[1])
         .filter(Boolean);
       enums[name] = values;
     }
@@ -59,17 +60,37 @@ export async function generateProject({
         type: ftype.trim(),
         attrs: fattrs.trim(),
       }));
-      const idField =
-        fields.find((f) => f.attrs.includes("@id")) ??
-        fields.find((f) => f.name === "id");
-      const hasCreatedAt = fields.some((f) => f.name === "createdAt");
-      return { name, fields, idField, hasCreatedAt };
+      const idFields = fields.filter((field) =>
+        /(?:^|\s)@id(?:\s|$|\()/.test(field.attrs),
+      );
+      const compoundIdMatch = body.match(/@@id\s*\(\s*\[([^\]]+)\]/);
+      const compoundIdFields = compoundIdMatch
+        ? compoundIdMatch[1]
+            .split(",")
+            .map((field) => field.trim())
+            .filter(Boolean)
+        : [];
+      const hasCreatedAt = fields.some(
+        (field) => field.name === "createdAt" && field.type === "DateTime",
+      );
+      return {
+        name,
+        fields,
+        idField: idFields.length === 1 ? idFields[0] : undefined,
+        idFields,
+        compoundIdFields,
+        hasCreatedAt,
+      };
     });
 
     // Helpers
     const baseType = (t) => t.replace(/\?$/, "").replace(/\[\]$/, "");
     const isOptional = (t) => t.endsWith("?");
     const isArray = (t) => t.replace(/\?$/, "").endsWith("[]");
+    const hasDefault = (field) =>
+      /(?:^|\s)@default\s*\(/.test(field.attrs);
+    const isUpdatedAt = (field) =>
+      /(?:^|\s)@updatedAt(?:\s|$)/.test(field.attrs);
     const scalarTypes = new Set([
       "String",
       "Int",
@@ -89,35 +110,42 @@ export async function generateProject({
       const type = baseType(field.type);
       const value = `formData.get("${field.name}")`;
       const stringValue = `String(${value} ?? "")`;
-      const emptyValue = isOptional(field.type) ? "null" : '""';
+      const emptyValue = hasDefault(field)
+        ? "undefined"
+        : isOptional(field.type)
+          ? "null"
+          : '""';
 
       if (enums[type]) {
-        return `${stringValue} as ${prismaInputType}["${field.name}"]`;
+        const enumValue = `${stringValue} as ${prismaInputType}["${field.name}"]`;
+        return hasDefault(field) || isOptional(field.type)
+          ? `${value} ? ${enumValue} : ${emptyValue}`
+          : enumValue;
       }
       switch (type) {
         case "Int":
         case "Float":
         case "Decimal":
-          return isOptional(field.type)
-            ? `${value} ? Number(${value}) : null`
+          return isOptional(field.type) || hasDefault(field)
+            ? `${value} ? Number(${value}) : ${emptyValue}`
             : `Number(${value})`;
         case "BigInt":
-          return isOptional(field.type)
-            ? `${value} ? BigInt(${stringValue}) : null`
+          return isOptional(field.type) || hasDefault(field)
+            ? `${value} ? BigInt(${stringValue}) : ${emptyValue}`
             : `BigInt(${stringValue})`;
         case "Boolean":
           return `formData.has("${field.name}")`;
         case "DateTime":
-          return isOptional(field.type)
-            ? `${value} ? new Date(${stringValue}) : null`
+          return isOptional(field.type) || hasDefault(field)
+            ? `${value} ? new Date(${stringValue}) : ${emptyValue}`
             : `new Date(${stringValue})`;
         case "Json":
           return `${value} ? JSON.parse(${stringValue}) : ${emptyValue}`;
         case "Bytes":
           return `Buffer.from(${stringValue})`;
         default:
-          return isOptional(field.type)
-            ? `${value} ? ${stringValue} : null`
+          return isOptional(field.type) || hasDefault(field)
+            ? `${value} ? ${stringValue} : ${emptyValue}`
             : stringValue;
       }
     };
@@ -176,6 +204,36 @@ export async function generateProject({
       if (b === "String" && /email/i.test(fieldName)) return { type: "email" };
       return { type: "text" };
     };
+    const pageModels = options.model
+      ? models.filter((model) => model.name === options.model)
+      : models;
+
+    if (options.pages) {
+      const supportedIdTypes = new Set(["String", "Int", "BigInt"]);
+      for (const model of pageModels) {
+        if (model.compoundIdFields.length > 0) {
+          throw new Error(
+            `Cannot generate admin pages for model "${model.name}": compound IDs ` +
+              `(@@id([${model.compoundIdFields.join(", ")}])) are not supported. ` +
+              "Use a single String, Int, or BigInt @id field, or run without --pages.",
+          );
+        }
+        if (model.idFields.length !== 1 || !model.idField) {
+          throw new Error(
+            `Cannot generate admin pages for model "${model.name}": expected one explicit scalar @id field. ` +
+              "Add a single String, Int, or BigInt @id field, or run without --pages.",
+          );
+        }
+        const idType = baseType(model.idField.type);
+        if (!isScalarField(model.idField) || !supportedIdTypes.has(idType)) {
+          throw new Error(
+            `Cannot generate admin pages for model "${model.name}": primary key ` +
+              `"${model.idField.name}" has unsupported type "${model.idField.type}". ` +
+              "Use a single String, Int, or BigInt @id field, or run without --pages.",
+          );
+        }
+      }
+    }
 
     // Generate configs and pages
     for (const model of models) {
@@ -183,7 +241,12 @@ export async function generateProject({
 
       const fieldsForUI = model.fields.filter(
         (f) =>
-          !["id", "createdAt", "updatedAt"].includes(f.name) &&
+          !(f === model.idField && hasDefault(f)) &&
+          !isUpdatedAt(f) &&
+          !(
+            ["createdAt", "updatedAt"].includes(f.name) &&
+            hasDefault(f)
+          ) &&
           isScalarField(f)
       );
 
@@ -191,14 +254,14 @@ export async function generateProject({
       const shapeProps = fieldsForUI
         .map(
           (f) =>
-            `  ${f.name}${isOptional(f.type) ? "?" : ""}: ${tsTypeFor(f.type)};`
+            `  ${f.name}${isOptional(f.type) || hasDefault(f) ? "?" : ""}: ${tsTypeFor(f.type)};`
         )
         .join("\n");
 
       const resourceFields = fieldsForUI.map((f) => ({
         name: f.name,
         label: f.name[0].toUpperCase() + f.name.slice(1),
-        required: !isOptional(f.type),
+        required: !isOptional(f.type) && !hasDefault(f),
         widget: widgetFor(f.name, f.type, model.fields),
       }));
 
@@ -282,7 +345,7 @@ const listPage = `
       params.dir === "asc" || params.dir === "desc"
         ? params.dir
         : defaultSortDir;
-    const orderBy = (sortKey ? { [sortKey]: sortDir } : ${model.hasCreatedAt ? `{ createdAt: "desc" }` : "{}"}) as Prisma.${model.name}OrderByWithRelationInput;
+    const orderBy = (sortKey ? { [sortKey]: sortDir } : ${model.hasCreatedAt ? `{ createdAt: "desc" }` : "undefined"}) as Prisma.${model.name}OrderByWithRelationInput | undefined;
 
     // Search
     const searchable = ${model.name}Resource.list?.searchable ?? [];
@@ -332,7 +395,7 @@ const listPage = `
       "use server";
       const id = String(formData.get("${idName}"));
       await prisma.${model.name.toLowerCase()}.delete({
-        where: { ${idName}: ${idTypeBase === "Int" || idTypeBase === "Float" || idTypeBase === "Decimal" ? "Number(id)" : "id"} }
+        where: { ${idName}: ${idTypeBase === "Int" ? "Number(id)" : idTypeBase === "BigInt" ? "BigInt(id)" : "id"} }
       });
       revalidatePath("/admin/${plural}");
     }
@@ -500,7 +563,7 @@ ${fieldsForUI
 
         export default async function Edit${model.name}Page({ params }: PageProps) {
           const routeParams = await params;
-          const id = ${idTypeBase === "Int" || idTypeBase === "Float" || idTypeBase === "Decimal" ? "Number(routeParams.id)" : "routeParams.id"};
+          const id = ${idTypeBase === "Int" ? "Number(routeParams.id)" : idTypeBase === "BigInt" ? "BigInt(routeParams.id)" : "routeParams.id"};
           const existing = await prisma.${model.name.toLowerCase()}.findUnique({
             where: { ${idName}: id }
           });
@@ -704,5 +767,11 @@ const isDirectRun =
   path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
 
 if (isDirectRun) {
-  program.parse(process.argv);
+  try {
+    await program.parseAsync(process.argv);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(chalk.red(`Error: ${message}`));
+    process.exitCode = 1;
+  }
 }

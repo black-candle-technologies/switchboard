@@ -13,9 +13,11 @@ export default function NewPostPage() {
       content: formData.get("content")
         ? String(formData.get("content") ?? "")
         : null,
-      status: String(
-        formData.get("status") ?? "",
-      ) as Prisma.PostUncheckedCreateInput["status"],
+      status: formData.get("status")
+        ? (String(
+            formData.get("status") ?? "",
+          ) as Prisma.PostUncheckedCreateInput["status"])
+        : undefined,
       authorId: String(formData.get("authorId") ?? ""),
     };
     await prisma.post.create({ data });

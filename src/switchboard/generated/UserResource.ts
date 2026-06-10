@@ -4,7 +4,7 @@ import type { ResourceConfig } from "@/switchboard/types";
 export type UserShape = {
   name: string;
   email: string;
-  role: "ADMIN" | "MANAGER" | "USER";
+  role?: "ADMIN" | "MANAGER" | "USER";
 };
 
 export const UserResource: ResourceConfig<UserShape> = {
@@ -30,7 +30,7 @@ export const UserResource: ResourceConfig<UserShape> = {
     {
       name: "role",
       label: "Role",
-      required: true,
+      required: false,
       widget: {
         type: "select",
         options: [

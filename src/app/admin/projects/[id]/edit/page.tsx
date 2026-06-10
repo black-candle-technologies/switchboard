@@ -22,9 +22,11 @@ export default async function EditProjectPage({ params }: PageProps) {
       description: formData.get("description")
         ? String(formData.get("description") ?? "")
         : null,
-      status: String(
-        formData.get("status") ?? "",
-      ) as Prisma.ProjectUncheckedUpdateInput["status"],
+      status: formData.get("status")
+        ? (String(
+            formData.get("status") ?? "",
+          ) as Prisma.ProjectUncheckedUpdateInput["status"])
+        : undefined,
       ownerId: formData.get("ownerId")
         ? String(formData.get("ownerId") ?? "")
         : null,

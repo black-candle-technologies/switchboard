@@ -22,9 +22,11 @@ export default async function EditPostPage({ params }: PageProps) {
       content: formData.get("content")
         ? String(formData.get("content") ?? "")
         : null,
-      status: String(
-        formData.get("status") ?? "",
-      ) as Prisma.PostUncheckedUpdateInput["status"],
+      status: formData.get("status")
+        ? (String(
+            formData.get("status") ?? "",
+          ) as Prisma.PostUncheckedUpdateInput["status"])
+        : undefined,
       authorId: String(formData.get("authorId") ?? ""),
     };
     await prisma.post.update({

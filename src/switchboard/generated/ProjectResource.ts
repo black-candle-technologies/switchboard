@@ -4,7 +4,7 @@ import type { ResourceConfig } from "@/switchboard/types";
 export type ProjectShape = {
   name: string;
   description?: string;
-  status: "ACTIVE" | "ON_HOLD" | "DONE";
+  status?: "ACTIVE" | "ON_HOLD" | "DONE";
   ownerId?: string;
 };
 
@@ -32,7 +32,7 @@ export const ProjectResource: ResourceConfig<ProjectShape> = {
     {
       name: "status",
       label: "Status",
-      required: true,
+      required: false,
       widget: {
         type: "select",
         options: [

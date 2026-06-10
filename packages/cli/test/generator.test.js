@@ -1,20 +1,19 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { afterEach, test } from "node:test";
-import { mkdtemp, mkdir, readFile, rm, copyFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import { generateProject } from "../bin/switchboard.js";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
-const fixtureSchema = path.join(
-  testDir,
-  "fixtures",
-  "basic",
-  "schema.prisma",
-);
+const cliPath = path.join(testDir, "..", "bin", "switchboard.js");
+const execFileAsync = promisify(execFile);
 const tempProjects = [];
+const stripAnsi = (value) => value.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
 
 afterEach(async () => {
   await Promise.all(
@@ -24,7 +23,7 @@ afterEach(async () => {
   );
 });
 
-async function generateFixture() {
+async function createFixtureProject(fixtureName = "basic") {
   const projectRoot = await mkdtemp(
     path.join(os.tmpdir(), "switchboard-generator-"),
   );
@@ -32,9 +31,17 @@ async function generateFixture() {
 
   const prismaDir = path.join(projectRoot, "src", "prisma");
   await mkdir(prismaDir, { recursive: true });
-  await copyFile(fixtureSchema, path.join(prismaDir, "schema.prisma"));
-  await generateProject({ projectRoot, pages: true });
+  await copyFile(
+    path.join(testDir, "fixtures", fixtureName, "schema.prisma"),
+    path.join(prismaDir, "schema.prisma"),
+  );
 
+  return projectRoot;
+}
+
+async function generateFixture(fixtureName = "basic", options = {}) {
+  const projectRoot = await createFixtureProject(fixtureName);
+  await generateProject({ projectRoot, pages: true, ...options });
   return projectRoot;
 }
 
@@ -125,4 +132,116 @@ test("generates enum fields and related-model routes without a database", async 
   assert.match(postNewPage, /authorId: String\(formData\.get\("authorId"\)/);
   assert.match(postNewPage, /await prisma\.post\.create\(\{ data \}\)/);
   assert.doesNotMatch(postNewPage, /PostListPage|searchParams|findMany/);
+});
+
+test("supports mapped fields, defaults, optional scalars, lists, relations, and custom IDs", async () => {
+  const projectRoot = await generateFixture("schema-edge-cases");
+
+  const accountResource = await readGenerated(
+    projectRoot,
+    "src",
+    "switchboard",
+    "generated",
+    "AccountResource.ts",
+  );
+  const accountListPage = await readGenerated(
+    projectRoot,
+    "src",
+    "app",
+    "admin",
+    "accounts",
+    "page.tsx",
+  );
+  const accountNewPage = await readGenerated(
+    projectRoot,
+    "src",
+    "app",
+    "admin",
+    "accounts",
+    "new",
+    "page.tsx",
+  );
+  const accountEditPage = await readGenerated(
+    projectRoot,
+    "src",
+    "app",
+    "admin",
+    "accounts",
+    "[id]",
+    "edit",
+    "page.tsx",
+  );
+
+  assert.match(accountResource, /name: "slug"/);
+  assert.match(accountResource, /name: "nickname"/);
+  assert.match(accountResource, /required: false/);
+  assert.match(accountResource, /"ACTIVE"/);
+  assert.match(accountResource, /"DISABLED"/);
+  assert.doesNotMatch(accountResource, /name: "tags"/);
+  assert.doesNotMatch(accountResource, /name: "posts"/);
+  assert.doesNotMatch(accountResource, /@map|@@map/);
+
+  assert.match(accountListPage, /defaultSortKey = ""/);
+  assert.match(accountListPage, /: undefined\)/);
+  assert.doesNotMatch(accountListPage, /createdAt/);
+  assert.match(accountListPage, /\.slug\)/);
+  assert.match(accountListPage, /name="slug"/);
+
+  assert.match(accountNewPage, /slug: String\(formData\.get\("slug"\)/);
+  assert.match(
+    accountNewPage,
+    /externalId: formData\.get\("externalId"\)[\s\S]*: undefined/,
+  );
+  assert.doesNotMatch(accountNewPage, /formData\.get\("tags"\)/);
+  assert.doesNotMatch(accountNewPage, /formData\.get\("posts"\)/);
+
+  assert.match(accountEditPage, /where: \{ slug: id \}/);
+  assert.match(accountEditPage, /const id = routeParams\.id/);
+});
+
+test("rejects compound IDs before generating admin pages", async () => {
+  const projectRoot = await createFixtureProject("compound-id");
+
+  await assert.rejects(
+    generateProject({ projectRoot, pages: true }),
+    /model "Membership": compound IDs \(@@id\(\[tenantId, userId\]\)\) are not supported/,
+  );
+  await assert.rejects(
+    readGenerated(
+      projectRoot,
+      "src",
+      "app",
+      "admin",
+      "memberships",
+      "page.tsx",
+    ),
+    /ENOENT/,
+  );
+});
+
+test("rejects models without one explicit scalar primary key", async () => {
+  const projectRoot = await createFixtureProject("no-primary-key");
+
+  await assert.rejects(
+    generateProject({ projectRoot, pages: true }),
+    /model "ExternalRecord": expected one explicit scalar @id field/,
+  );
+});
+
+test("CLI reports unsupported compound IDs without an async stack trace", async () => {
+  const projectRoot = await createFixtureProject("compound-id");
+
+  await assert.rejects(
+    execFileAsync(process.execPath, [cliPath, "generate", "--pages"], {
+      cwd: projectRoot,
+    }),
+    (error) => {
+      const stderr = stripAnsi(error.stderr);
+      assert.equal(error.code, 1);
+      assert.match(stderr, /^Error: Cannot generate admin pages/);
+      assert.match(stderr, /compound IDs/);
+      assert.doesNotMatch(stderr, /\n\s+at /);
+      return true;
+    },
+  );
 });

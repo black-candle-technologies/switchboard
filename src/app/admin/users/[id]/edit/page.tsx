@@ -20,9 +20,11 @@ export default async function EditUserPage({ params }: PageProps) {
     const data: Prisma.UserUncheckedUpdateInput = {
       name: String(formData.get("name") ?? ""),
       email: String(formData.get("email") ?? ""),
-      role: String(
-        formData.get("role") ?? "",
-      ) as Prisma.UserUncheckedUpdateInput["role"],
+      role: formData.get("role")
+        ? (String(
+            formData.get("role") ?? "",
+          ) as Prisma.UserUncheckedUpdateInput["role"])
+        : undefined,
     };
     await prisma.user.update({
       where: { id: id },

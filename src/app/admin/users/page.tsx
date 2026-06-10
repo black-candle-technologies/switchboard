@@ -22,9 +22,9 @@ export default async function UserListPage({ searchParams }: PageProps) {
     typeof params.sort === "string" ? params.sort : defaultSortKey;
   const sortDir =
     params.dir === "asc" || params.dir === "desc" ? params.dir : defaultSortDir;
-  const orderBy = (
-    sortKey ? { [sortKey]: sortDir } : { createdAt: "desc" }
-  ) as Prisma.UserOrderByWithRelationInput;
+  const orderBy = (sortKey ? { [sortKey]: sortDir } : { createdAt: "desc" }) as
+    | Prisma.UserOrderByWithRelationInput
+    | undefined;
 
   // Search
   const searchable = UserResource.list?.searchable ?? [];

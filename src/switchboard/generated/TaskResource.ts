@@ -5,7 +5,7 @@ export type TaskShape = {
   projectId: string;
   title: string;
   dueDate?: string;
-  done: boolean;
+  done?: boolean;
   assigneeId?: string;
 };
 
@@ -41,7 +41,7 @@ export const TaskResource: ResourceConfig<TaskShape> = {
     {
       name: "done",
       label: "Done",
-      required: true,
+      required: false,
       widget: {
         type: "checkbox",
       },

@@ -22,9 +22,9 @@ export default async function ProjectListPage({ searchParams }: PageProps) {
     typeof params.sort === "string" ? params.sort : defaultSortKey;
   const sortDir =
     params.dir === "asc" || params.dir === "desc" ? params.dir : defaultSortDir;
-  const orderBy = (
-    sortKey ? { [sortKey]: sortDir } : { createdAt: "desc" }
-  ) as Prisma.ProjectOrderByWithRelationInput;
+  const orderBy = (sortKey ? { [sortKey]: sortDir } : { createdAt: "desc" }) as
+    | Prisma.ProjectOrderByWithRelationInput
+    | undefined;
 
   // Search
   const searchable = ProjectResource.list?.searchable ?? [];

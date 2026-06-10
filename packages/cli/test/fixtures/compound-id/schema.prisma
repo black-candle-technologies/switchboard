@@ -1,0 +1,16 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Membership {
+  tenantId String
+  userId   String
+  role     String
+
+  @@id([tenantId, userId])
+}

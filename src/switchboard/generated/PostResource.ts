@@ -4,7 +4,7 @@ import type { ResourceConfig } from "@/switchboard/types";
 export type PostShape = {
   title: string;
   content?: string;
-  status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+  status?: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   authorId: string;
 };
 
@@ -32,7 +32,7 @@ export const PostResource: ResourceConfig<PostShape> = {
     {
       name: "status",
       label: "Status",
-      required: true,
+      required: false,
       widget: {
         type: "select",
         options: [

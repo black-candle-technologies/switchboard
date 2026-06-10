@@ -13,9 +13,11 @@ export default function NewProjectPage() {
       description: formData.get("description")
         ? String(formData.get("description") ?? "")
         : null,
-      status: String(
-        formData.get("status") ?? "",
-      ) as Prisma.ProjectUncheckedCreateInput["status"],
+      status: formData.get("status")
+        ? (String(
+            formData.get("status") ?? "",
+          ) as Prisma.ProjectUncheckedCreateInput["status"])
+        : undefined,
       ownerId: formData.get("ownerId")
         ? String(formData.get("ownerId") ?? "")
         : null,
