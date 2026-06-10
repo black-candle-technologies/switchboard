@@ -5,6 +5,36 @@ database-backed admin resources and routes from a Prisma schema. The CLI is
 published as
 [`@lanebucher/switchboard`](https://www.npmjs.com/package/@lanebucher/switchboard).
 
+## Quick Start
+
+From an existing Next.js App Router and Prisma project:
+
+```bash
+npm install --save-dev @lanebucher/switchboard
+```
+
+Set the database connection in `.env`. For SQLite with the default schema
+location:
+
+```dotenv
+DATABASE_URL="file:./dev.db"
+```
+
+Create the database, generate the Prisma client, and run Switchboard:
+
+```bash
+npx prisma migrate dev --schema src/prisma/schema.prisma
+npx prisma generate --schema src/prisma/schema.prisma
+npx switchboard generate --pages
+npm run dev
+```
+
+Open `http://localhost:3000/admin`.
+
+Switchboard currently generates project source files rather than installing a
+complete runtime. Before generated pages compile, the project must provide the
+compatible support modules listed under [Generated Output](#generated-output).
+
 ## Local Development
 
 Requirements:
@@ -74,7 +104,32 @@ To test the published package without linking it globally:
 npx @lanebucher/switchboard generate --pages
 ```
 
-The CLI expects the Prisma schema at `src/prisma/schema.prisma`.
+The defaults expect the Prisma schema at `src/prisma/schema.prisma`, write
+Switchboard files under `src/switchboard`, and write pages under
+`src/app/admin`.
+
+```bash
+switchboard generate [options]
+```
+
+| Option | Description |
+| --- | --- |
+| `-m, --model <name>` | Generate only one Prisma model. |
+| `--schema <path>` | Schema path relative to the project root. |
+| `--out <path>` | Switchboard output root inside `src`. |
+| `--pages` | Also generate App Router admin pages. |
+
+Example with custom paths:
+
+```bash
+npx switchboard generate \
+  --schema prisma/schema.prisma \
+  --out src/admin-kit \
+  --pages
+```
+
+`--out` changes the resource and registry location. Admin pages remain under
+`src/app/admin`.
 
 ## Generated Output
 
@@ -100,6 +155,10 @@ standalone admin framework. Generated pages import host-project modules such as
 `@/lib/prisma`, `@/components/form/SmartForm`,
 `@/components/table/SimpleTable`, and `@/switchboard/types`. A target project
 must provide compatible versions of those modules.
+
+Generated files belong to the project and can be edited. Re-running generation
+overwrites resource configs, the registry, admin list/new/edit pages, and the
+admin index. An existing `src/app/admin/layout.tsx` is preserved.
 
 Use `--model` to limit generation to one Prisma model:
 

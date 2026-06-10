@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { afterEach, test } from "node:test";
-import { copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -23,18 +30,27 @@ afterEach(async () => {
   );
 });
 
-async function createFixtureProject(fixtureName = "basic") {
+async function createFixtureProject(
+  fixtureName = "basic",
+  {
+    createApp = true,
+    schemaPath = path.join("src", "prisma", "schema.prisma"),
+  } = {},
+) {
   const projectRoot = await mkdtemp(
     path.join(os.tmpdir(), "switchboard-generator-"),
   );
   tempProjects.push(projectRoot);
 
-  const prismaDir = path.join(projectRoot, "src", "prisma");
-  await mkdir(prismaDir, { recursive: true });
+  const targetSchemaPath = path.join(projectRoot, schemaPath);
+  await mkdir(path.dirname(targetSchemaPath), { recursive: true });
   await copyFile(
     path.join(testDir, "fixtures", fixtureName, "schema.prisma"),
-    path.join(prismaDir, "schema.prisma"),
+    targetSchemaPath,
   );
+  if (createApp) {
+    await mkdir(path.join(projectRoot, "src", "app"), { recursive: true });
+  }
 
   return projectRoot;
 }
@@ -241,6 +257,143 @@ test("CLI reports unsupported compound IDs without an async stack trace", async 
       assert.match(stderr, /^Error: Cannot generate admin pages/);
       assert.match(stderr, /compound IDs/);
       assert.doesNotMatch(stderr, /\n\s+at /);
+      return true;
+    },
+  );
+});
+
+test("CLI supports custom schema and Switchboard output paths", async () => {
+  const schemaPath = path.join("config", "prisma", "app.prisma");
+  const projectRoot = await createFixtureProject("basic", { schemaPath });
+
+  await execFileAsync(
+    process.execPath,
+    [
+      cliPath,
+      "generate",
+      "--schema",
+      schemaPath,
+      "--out",
+      "src/admin-kit",
+      "--pages",
+    ],
+    { cwd: projectRoot },
+  );
+
+  const userResource = await readGenerated(
+    projectRoot,
+    "src",
+    "admin-kit",
+    "generated",
+    "UserResource.ts",
+  );
+  const registry = await readGenerated(
+    projectRoot,
+    "src",
+    "admin-kit",
+    "registry.ts",
+  );
+  const userPage = await readGenerated(
+    projectRoot,
+    "src",
+    "app",
+    "admin",
+    "users",
+    "page.tsx",
+  );
+
+  assert.match(userResource, /from "@\/admin-kit\/types"/);
+  assert.match(registry, /from "@\/admin-kit\/overrides"/);
+  assert.match(userPage, /from "@\/admin-kit\/generated\/UserResource"/);
+});
+
+test("CLI gives actionable errors for missing and invalid schemas", async () => {
+  const projectRoot = await createFixtureProject();
+
+  await assert.rejects(
+    execFileAsync(
+      process.execPath,
+      [cliPath, "generate", "--schema", "missing/schema.prisma"],
+      { cwd: projectRoot },
+    ),
+    (error) => {
+      const stderr = stripAnsi(error.stderr);
+      assert.match(stderr, /Prisma schema not found/);
+      assert.match(stderr, /Pass --schema <path>/);
+      return true;
+    },
+  );
+
+  const invalidSchemaPath = path.join(projectRoot, "invalid.prisma");
+  await writeFile(
+    invalidSchemaPath,
+    'datasource db {\n  provider = "sqlite"\n  url = env("DATABASE_URL")\n}\n',
+    "utf8",
+  );
+
+  await assert.rejects(
+    execFileAsync(
+      process.execPath,
+      [cliPath, "generate", "--schema", "invalid.prisma"],
+      { cwd: projectRoot },
+    ),
+    (error) => {
+      const stderr = stripAnsi(error.stderr);
+      assert.match(stderr, /No Prisma models found/);
+      assert.match(stderr, /contains at least one model block/);
+      return true;
+    },
+  );
+});
+
+test("CLI rejects missing App Router and output paths outside src", async () => {
+  const projectRoot = await createFixtureProject("basic", {
+    createApp: false,
+  });
+
+  await assert.rejects(
+    execFileAsync(process.execPath, [cliPath, "generate", "--pages"], {
+      cwd: projectRoot,
+    }),
+    (error) => {
+      const stderr = stripAnsi(error.stderr);
+      assert.match(stderr, /expected a Next\.js App Router directory/);
+      assert.match(stderr, /Create src\/app first/);
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    execFileAsync(
+      process.execPath,
+      [cliPath, "generate", "--out", "generated-switchboard"],
+      { cwd: projectRoot },
+    ),
+    (error) => {
+      const stderr = stripAnsi(error.stderr);
+      assert.match(stderr, /Unsupported output path/);
+      assert.match(stderr, /inside "src"/);
+      return true;
+    },
+  );
+});
+
+test("CLI rejects unsupported projects without a src directory", async () => {
+  const projectRoot = await createFixtureProject("basic", {
+    createApp: false,
+    schemaPath: "schema.prisma",
+  });
+
+  await assert.rejects(
+    execFileAsync(
+      process.execPath,
+      [cliPath, "generate", "--schema", "schema.prisma"],
+      { cwd: projectRoot },
+    ),
+    (error) => {
+      const stderr = stripAnsi(error.stderr);
+      assert.match(stderr, /Unsupported project structure/);
+      assert.match(stderr, /expected a "src" directory/);
       return true;
     },
   );
