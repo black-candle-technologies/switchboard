@@ -15,6 +15,7 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --test packages/cli/test/*.test.js",
     "db:migrate": "prisma migrate dev --name init --schema src/prisma/schema.prisma",
     "db:seed": "prisma db seed --schema src/prisma/schema.prisma",
     "db:generate": "prisma generate --schema src/prisma/schema.prisma"

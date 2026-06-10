@@ -4,6 +4,7 @@ import chalk from "chalk";
 import fs from "fs-extra";
 import path from "path";
 import prettier from "prettier";
+import { fileURLToPath } from "url";
 
 const program = new Command();
 
@@ -20,20 +21,19 @@ program
   .description("CLI for generating Switchboard admin resources and pages")
   .version("0.4.2");
 
-program
-  .command("generate")
-  .description("Generate Switchboard resource configs and/or Next.js admin pages")
-  .option("-m, --model <modelName>", "Generate a specific model only")
-  .option("--pages", "Also generate Next.js pages for each resource")
-  .action(async (options) => {
-    const projectRoot = process.cwd();
+export async function generateProject({
+  projectRoot = process.cwd(),
+  model,
+  pages = false,
+} = {}) {
+    const options = { model, pages };
     const schemaPath = path.join(projectRoot, "src/prisma/schema.prisma");
     const genDir = path.join(projectRoot, "src/switchboard/generated");
     await fs.ensureDir(genDir);
 
     if (!fs.existsSync(schemaPath)) {
       console.error(chalk.red(`❌ Could not find schema.prisma at ${schemaPath}`));
-      process.exit(1);
+      throw new Error(`Could not find schema.prisma at ${schemaPath}`);
     }
 
     const schema = await fs.readFile(schemaPath, "utf8");
@@ -684,6 +684,25 @@ ${fieldsForUI
       );
       console.log(chalk.green(`✅ Created /admin/page.tsx`));
     }
+}
+
+program
+  .command("generate")
+  .description("Generate Switchboard resource configs and/or Next.js admin pages")
+  .option("-m, --model <modelName>", "Generate a specific model only")
+  .option("--pages", "Also generate Next.js pages for each resource")
+  .action(async (options) => {
+    await generateProject({
+      projectRoot: process.cwd(),
+      model: options.model,
+      pages: options.pages,
+    });
   });
 
-program.parse(process.argv);
+const isDirectRun =
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+
+if (isDirectRun) {
+  program.parse(process.argv);
+}
