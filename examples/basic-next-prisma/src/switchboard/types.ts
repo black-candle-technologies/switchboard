@@ -1,5 +1,6 @@
 export type TextWidget = { type: "text"; placeholder?: string };
 export type EmailWidget = { type: "email"; placeholder?: string };
+export type PasswordWidget = { type: "password"; placeholder?: string };
 export type TextareaWidget = {
   type: "textarea";
   rows?: number;
@@ -21,6 +22,7 @@ export type RelationWidget = {
 export type FieldWidget =
   | TextWidget
   | EmailWidget
+  | PasswordWidget
   | TextareaWidget
   | CheckboxWidget
   | DatetimeWidget

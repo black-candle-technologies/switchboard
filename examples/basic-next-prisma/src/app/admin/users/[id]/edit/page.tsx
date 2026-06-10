@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { SmartForm } from "@/components/form/SmartForm";
 import { UserResource } from "@/switchboard/generated/UserResource";
+import { hashPassword } from "@/switchboard/auth";
 import type { Prisma } from "@prisma/client";
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -21,7 +22,11 @@ export default async function EditUserPage({ params }: PageProps) {
     "use server";
     const data: Prisma.UserUncheckedUpdateInput = {
       name: String(formData.get("name") ?? ""),
+      username: String(formData.get("username") ?? ""),
       email: String(formData.get("email") ?? ""),
+      passwordHash: formData.get("passwordHash")
+        ? await hashPassword(String(formData.get("passwordHash") ?? ""))
+        : undefined,
       role: formData.get("role")
         ? (String(
             formData.get("role") ?? "",
@@ -39,7 +44,11 @@ export default async function EditUserPage({ params }: PageProps) {
   const initialValues = Object.fromEntries(
     Object.entries(existing).map(([key, value]) => [
       key,
-      value instanceof Date ? value.toISOString().slice(0, 16) : value,
+      ["password", "passwordHash"].includes(key)
+        ? ""
+        : value instanceof Date
+          ? value.toISOString().slice(0, 16)
+          : value,
     ]),
   );
 

@@ -17,6 +17,8 @@ export function registerGenerateCommand(program) {
     )
     .option("--app-dir <path>", "Custom Next.js App Router directory")
     .option("--pages", "Also generate Next.js pages for each resource")
+    .option("--force", "Overwrite existing generated resource and page files")
+    .option("--dry-run", "Show planned changes without writing files")
     .action(async (options) => {
       await generateProject({
         projectRoot: process.cwd(),
@@ -25,6 +27,8 @@ export function registerGenerateCommand(program) {
         schemaPath: options.schema,
         out: options.out,
         appDir: options.appDir,
+        force: options.force,
+        dryRun: options.dryRun,
       });
     });
 }

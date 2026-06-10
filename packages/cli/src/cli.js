@@ -1,5 +1,6 @@
 import { Command } from "commander";
 
+import { registerAuthCommand } from "./commands/auth.js";
 import { registerGenerateCommand } from "./commands/generate.js";
 import { registerInitCommand } from "./commands/init.js";
 
@@ -11,6 +12,7 @@ export function createCli() {
 
   registerInitCommand(program);
   registerGenerateCommand(program);
+  registerAuthCommand(program);
 
   return program;
 }

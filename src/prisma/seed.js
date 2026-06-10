@@ -1,31 +1,76 @@
 ﻿import { PrismaClient, Role, PostStatus, ProjectStatus } from "@prisma/client";
 
+import { randomBytes, scryptSync } from "node:crypto";
+
 const prisma = new PrismaClient();
 
+function hashPassword(password) {
+  const salt = randomBytes(16);
+  const options = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
+  const hash = scryptSync(password, salt, 64, options);
+  return [
+    "scrypt",
+    options.N,
+    options.r,
+    options.p,
+    salt.toString("base64url"),
+    hash.toString("base64url"),
+  ].join("$");
+}
+
 async function main() {
+  const localPasswordHash = hashPassword("password");
   // Users - seed (modify as needed)
   const ada = await prisma.user.upsert({
     where: { email: "ada@example.com" },
-    update: {},
-    create: { name: "Ada Lovelace", email: "ada@example.com", role: Role.ADMIN },
+    update: {
+      username: "admin",
+      passwordHash: localPasswordHash,
+      role: Role.ADMIN,
+    },
+    create: {
+      name: "Ada Lovelace",
+      username: "admin",
+      email: "ada@example.com",
+      passwordHash: localPasswordHash,
+      role: Role.ADMIN,
+    },
   });
 
   const grace = await prisma.user.upsert({
     where: { email: "grace@example.com" },
-    update: {},
-    create: { name: "Grace Hopper", email: "grace@example.com", role: Role.MANAGER },
+    update: { username: "grace", passwordHash: localPasswordHash },
+    create: {
+      name: "Grace Hopper",
+      username: "grace",
+      email: "grace@example.com",
+      passwordHash: localPasswordHash,
+      role: Role.MANAGER,
+    },
   });
 
   const alan = await prisma.user.upsert({
     where: { email: "alan@example.com" },
-    update: {},
-    create: { name: "Alan Turing", email: "alan@example.com", role: Role.USER },
+    update: { username: "alan", passwordHash: localPasswordHash },
+    create: {
+      name: "Alan Turing",
+      username: "alan",
+      email: "alan@example.com",
+      passwordHash: localPasswordHash,
+      role: Role.USER,
+    },
   });
 
   const john = await prisma.user.upsert({
     where: { email: "john@appleberry.com" },
-    update: {},
-    create: { name: "John Appleberry", email: "john@appleberry.com", role: Role.USER },
+    update: { username: "john", passwordHash: localPasswordHash },
+    create: {
+      name: "John Appleberry",
+      username: "john",
+      email: "john@appleberry.com",
+      passwordHash: localPasswordHash,
+      role: Role.USER,
+    },
   });
 
   // Projects

@@ -21,6 +21,7 @@ const commands = [
   ["run", "prisma:migrate"],
   ["run", "switchboard:init"],
   ["run", "switchboard:generate"],
+  ["run", "switchboard:seed-admin"],
   ["run", "build"],
 ];
 

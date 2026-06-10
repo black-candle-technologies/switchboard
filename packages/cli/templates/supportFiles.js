@@ -1,7 +1,20 @@
 import path from "path";
 
-export function supportFiles(layout) {
-  const switchboardImport = "@/switchboard";
+import { importPath } from "../src/project/importPath.js";
+import { adminLayoutTemplate } from "./adminLayout.js";
+import { authSupportFiles } from "./authFiles.js";
+
+export function supportFiles(layout, auth) {
+  const typesPath = path.join(layout.switchboardDir, "types.ts");
+  const overridesPath = path.join(layout.switchboardDir, "overrides.ts");
+  const registryPath = path.join(layout.switchboardDir, "registry.ts");
+  const smartFormPath = path.join(
+    layout.componentsDir,
+    "form",
+    "SmartForm.tsx",
+  );
+  const adminLayoutPath = path.join(layout.appDir, "admin", "layout.tsx");
+  const adminPagePath = path.join(layout.appDir, "admin", "page.tsx");
   return [
     {
       path: path.join(layout.libDir, "prisma.ts"),
@@ -21,9 +34,10 @@ export { prisma };
 `,
     },
     {
-      path: path.join(layout.switchboardDir, "types.ts"),
+      path: typesPath,
       content: `export type TextWidget = { type: "text"; placeholder?: string };
 export type EmailWidget = { type: "email"; placeholder?: string };
+export type PasswordWidget = { type: "password"; placeholder?: string };
 export type TextareaWidget = {
   type: "textarea";
   rows?: number;
@@ -45,6 +59,7 @@ export type RelationWidget = {
 export type FieldWidget =
   | TextWidget
   | EmailWidget
+  | PasswordWidget
   | TextareaWidget
   | CheckboxWidget
   | DatetimeWidget
@@ -81,8 +96,8 @@ export type ResourceConfig<T = unknown> = {
 `,
     },
     {
-      path: path.join(layout.switchboardDir, "overrides.ts"),
-      content: `import type { ResourceConfig } from "${switchboardImport}/types";
+      path: overridesPath,
+      content: `import type { ResourceConfig } from "${importPath(layout, overridesPath, typesPath)}";
 
 export type ResourcePatch<T = unknown> = Partial<ResourceConfig<T>>;
 
@@ -105,17 +120,17 @@ export const overrides: Readonly<
 `,
     },
     {
-      path: path.join(layout.switchboardDir, "registry.ts"),
-      content: `import type { ResourceConfig } from "${switchboardImport}/types";
+      path: registryPath,
+      content: `import type { ResourceConfig } from "${importPath(layout, registryPath, typesPath)}";
 
 export const resources: ResourceConfig[] = [];
 `,
     },
     {
-      path: path.join(layout.componentsDir, "form", "SmartForm.tsx"),
+      path: smartFormPath,
       content: `"use client";
 
-import type { FieldConfig } from "${switchboardImport}/types";
+import type { FieldConfig } from "${importPath(layout, smartFormPath, typesPath)}";
 
 type Props = {
   title: string;
@@ -147,10 +162,10 @@ export function SmartForm({
           const value = initialValues[field.name];
           if (field.widget.type === "select") {
             return (
-              <label className="sb-form-row" key={field.name}>
-                <span className="sb-label">{field.label}</span>
+              <label className="sb-form-field" key={field.name}>
+                <span className="sb-form-label">{field.label}</span>
                 <select
-                  className="sb-input"
+                  className="sb-form-control sb-select"
                   defaultValue={String(value ?? "")}
                   name={field.name}
                   required={field.required}
@@ -167,45 +182,61 @@ export function SmartForm({
           }
           if (field.widget.type === "textarea") {
             return (
-              <label className="sb-form-row" key={field.name}>
-                <span className="sb-label">{field.label}</span>
+              <label className="sb-form-field" key={field.name}>
+                <span className="sb-form-label">{field.label}</span>
                 <textarea
-                  className="sb-input"
+                  className="sb-form-control sb-textarea"
                   defaultValue={String(value ?? "")}
                   name={field.name}
                   required={field.required}
-                  rows={field.widget.rows ?? 4}
+                  rows={field.widget.rows ?? 6}
                 />
               </label>
             );
           }
           if (field.widget.type === "checkbox") {
             return (
-              <label className="sb-checkbox-row" key={field.name}>
+              <label
+                className="sb-form-field sb-checkbox-field"
+                key={field.name}
+              >
                 <input
                   className="sb-checkbox"
                   defaultChecked={Boolean(value)}
                   name={field.name}
                   type="checkbox"
                 />
-                <span className="sb-label">{field.label}</span>
+                <span className="sb-form-label">{field.label}</span>
               </label>
             );
           }
           const inputType =
             field.widget.type === "email"
               ? "email"
+              : field.widget.type === "password"
+                ? "password"
               : field.widget.type === "datetime"
                 ? "datetime-local"
                 : "text";
           return (
-            <label className="sb-form-row" key={field.name}>
-              <span className="sb-label">{field.label}</span>
+            <label className="sb-form-field" key={field.name}>
+              <span className="sb-form-label">{field.label}</span>
               <input
-                className="sb-input"
-                defaultValue={String(value ?? "")}
+                className="sb-form-control"
+                autoComplete={
+                  field.widget.type === "password" ? "new-password" : undefined
+                }
+                defaultValue={
+                  field.widget.type === "password" ? "" : String(value ?? "")
+                }
                 name={field.name}
-                required={field.required}
+                required={
+                  field.required &&
+                  !(
+                    field.widget.type === "password" &&
+                    Object.keys(initialValues).length > 0
+                  )
+                }
                 type={inputType}
               />
             </label>
@@ -352,6 +383,12 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 24px;
+}
+
+.sb-admin-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 .sb-admin-brand {
@@ -572,21 +609,57 @@ body {
 
 .sb-form {
   display: grid;
-  gap: 18px;
-  padding: 22px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  width: 100%;
+  padding: 24px;
 }
 
-.sb-form-row {
+.sb-form-field {
   display: grid;
-  gap: 7px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
 }
 
-.sb-label {
+.sb-form-label {
+  display: block;
+  color: var(--sb-text);
   font-size: 14px;
   font-weight: 650;
+  line-height: 1.4;
 }
 
-.sb-checkbox-row {
+.sb-form-control {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid #cbd3dc;
+  border-radius: 8px;
+  background: var(--sb-surface);
+  color: var(--sb-text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.sb-form-control:focus {
+  border-color: var(--sb-accent);
+  outline: 3px solid rgba(29, 78, 216, 0.14);
+}
+
+.sb-select {
+  appearance: auto;
+}
+
+.sb-textarea {
+  min-height: 140px;
+  resize: vertical;
+}
+
+.sb-checkbox-field {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -599,7 +672,45 @@ body {
 }
 
 .sb-form-actions {
-  padding-top: 4px;
+  flex-wrap: wrap;
+  padding-top: 18px;
+  border-top: 1px solid var(--sb-border);
+}
+
+.sb-login-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  background: var(--sb-bg);
+  color: var(--sb-text);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+.sb-login-card {
+  display: grid;
+  gap: 20px;
+  width: min(100%, 440px);
+  padding: 28px;
+}
+
+.sb-login-form {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+.sb-login-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #f0b4ae;
+  border-radius: 8px;
+  background: #fff4f2;
+  color: var(--sb-danger);
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .sb-table-wrap {
@@ -702,61 +813,21 @@ body {
   .sb-search-form .sb-button {
     width: 100%;
   }
-}
-`,
-    },
-    {
-      path: path.join(layout.appDir, "admin", "layout.tsx"),
-      content: `import "./switchboard.css";
-import Link from "next/link";
-import { resources } from "${switchboardImport}/registry";
 
-export default function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="sb-admin-shell">
-      <header className="sb-admin-header">
-        <nav className="sb-admin-nav">
-          <Link className="sb-admin-brand" href="/admin">
-            Switchboard
-          </Link>
-          <Link className="sb-admin-home-link" href="/">
-            Back to site
-          </Link>
-        </nav>
-      </header>
-      <main className="sb-admin-main">
-          <aside className="sb-admin-sidebar">
-            <nav className="sb-resource-nav" aria-label="Admin resources">
-              <h2 className="sb-resource-nav-title">Resources</h2>
-              <ul className="sb-resource-list">
-                {resources.map((resource) => (
-                  <li key={resource.resource}>
-                    <Link
-                      className="sb-resource-link"
-                      href={"/admin/" + resource.resource.toLowerCase() + "s"}
-                    >
-                      {resource.displayName}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </nav>
-          </aside>
-          <section className="sb-admin-content">{children}</section>
-      </main>
-    </div>
-  );
+  .sb-admin-nav-actions {
+    gap: 8px;
+  }
 }
 `,
     },
     {
-      path: path.join(layout.appDir, "admin", "page.tsx"),
+      path: adminLayoutPath,
+      content: adminLayoutTemplate(layout, adminLayoutPath, registryPath),
+    },
+    {
+      path: adminPagePath,
       content: `import Link from "next/link";
-import { resources } from "${switchboardImport}/registry";
+import { resources } from "${importPath(layout, adminPagePath, registryPath)}";
 
 export default function AdminIndex() {
   return (
@@ -797,5 +868,6 @@ export default function AdminIndex() {
 }
 `,
     },
+    ...authSupportFiles(layout, auth),
   ];
 }

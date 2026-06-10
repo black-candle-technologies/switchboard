@@ -9,7 +9,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init",
     "switchboard:init": "switchboard init",
-    "switchboard:generate": "switchboard generate --pages"
+    "switchboard:generate": "switchboard generate --pages",
+    "switchboard:seed-admin": "switchboard auth seed-admin"
   },
   "prisma": {
     "schema": "src/prisma/schema.prisma"

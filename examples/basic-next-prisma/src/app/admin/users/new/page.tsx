@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { SmartForm } from "@/components/form/SmartForm";
 import { UserResource } from "@/switchboard/generated/UserResource";
+import { hashPassword } from "@/switchboard/auth";
 import type { Prisma } from "@prisma/client";
 
 export default function NewUserPage() {
@@ -11,7 +12,11 @@ export default function NewUserPage() {
     "use server";
     const data: Prisma.UserUncheckedCreateInput = {
       name: String(formData.get("name") ?? ""),
+      username: String(formData.get("username") ?? ""),
       email: String(formData.get("email") ?? ""),
+      passwordHash: await hashPassword(
+        String(formData.get("passwordHash") ?? ""),
+      ),
       role: formData.get("role")
         ? (String(
             formData.get("role") ?? "",

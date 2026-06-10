@@ -5,6 +5,7 @@ import {
   access,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rm,
   writeFile,
@@ -28,8 +29,16 @@ datasource db {
 }
 
 model User {
-  id String @id @default(cuid())
-  name String
+  id           String @id @default(cuid())
+  name         String
+  username     String @unique
+  passwordHash String
+  role         Role   @default(USER)
+}
+
+enum Role {
+  ADMIN
+  USER
 }
 `;
 
@@ -45,6 +54,8 @@ async function createProject({
   appDir = "src/app",
   schemaPath,
   alias,
+  withAlias = true,
+  configFile = "tsconfig.json",
 } = {}) {
   const projectRoot = await mkdtemp(path.join(os.tmpdir(), "switchboard-init-"));
   tempProjects.push(projectRoot);
@@ -58,13 +69,15 @@ async function createProject({
   });
   await writeFile(path.join(projectRoot, resolvedSchemaPath), schema, "utf8");
   await writeFile(
-    path.join(projectRoot, "tsconfig.json"),
+    path.join(projectRoot, configFile),
     JSON.stringify(
       {
-        compilerOptions: {
-          baseUrl: ".",
-          paths: { "@/*": [alias ?? (usesSrc ? "./src/*" : "./*")] },
-        },
+        compilerOptions: withAlias
+          ? {
+              baseUrl: ".",
+              paths: { "@/*": [alias ?? (usesSrc ? "./src/*" : "./*")] },
+            }
+          : {},
       },
       null,
       2,
@@ -90,11 +103,16 @@ test("init creates support files in a src/app project", async () => {
     "src/switchboard/types.ts",
     "src/switchboard/registry.ts",
     "src/switchboard/overrides.ts",
+    "src/switchboard/auth.ts",
+    "src/switchboard/auth-actions.ts",
     "src/components/form/SmartForm.tsx",
     "src/components/table/SimpleTable.tsx",
+    "src/middleware.ts",
     "src/app/admin/switchboard.css",
     "src/app/admin/layout.tsx",
     "src/app/admin/page.tsx",
+    "src/app/admin/login/page.tsx",
+    "src/app/admin/logout/route.ts",
   ];
   await Promise.all(
     expectedFiles.map((file) => access(path.join(projectRoot, file))),
@@ -110,14 +128,39 @@ test("init creates support files in a src/app project", async () => {
   );
   assert.match(layout, /import "\.\/switchboard\.css"/);
   assert.match(layout, /className="sb-admin-shell"/);
+  assert.match(layout, /href="\/admin\/logout"/);
   assert.match(stylesheet, /\.sb-admin-shell/);
   assert.match(stylesheet, /\.sb-table/);
   assert.match(stylesheet, /\.sb-form/);
+  assert.match(stylesheet, /\.sb-form-field/);
+  assert.match(stylesheet, /\.sb-form-control/);
+  assert.match(stylesheet, /\.sb-textarea/);
+  assert.match(stylesheet, /\.sb-select/);
+  assert.match(stylesheet, /\.sb-login-shell/);
+  const smartForm = await readFile(
+    path.join(
+      projectRoot,
+      "src",
+      "components",
+      "form",
+      "SmartForm.tsx",
+    ),
+    "utf8",
+  );
+  assert.match(smartForm, /className="sb-form-field"/);
+  assert.match(smartForm, /className="sb-form-label"/);
+  assert.match(smartForm, /className="sb-form-control sb-textarea"/);
+  assert.match(smartForm, /className="sb-form-control sb-select"/);
   assert.match(stdout, /Next: run npx switchboard generate --pages/);
+  assert.match(stdout, /SWITCHBOARD_SESSION_SECRET/);
+  assert.match(stdout, /auth seed-admin/);
 });
 
 test("init creates support files in a root app project and generate still works", async () => {
-  const projectRoot = await createProject({ appDir: "app" });
+  const projectRoot = await createProject({
+    appDir: "app",
+    configFile: "jsconfig.json",
+  });
 
   await runCli(projectRoot, "init");
   await runCli(projectRoot, "generate", "--pages");
@@ -132,6 +175,89 @@ test("init creates support files in a root app project and generate still works"
   );
   assert.match(userPage, /from "@\/switchboard\/generated\/UserResource"/);
 });
+
+for (const {
+  name,
+  appDir,
+  schemaPath,
+  supportRoot,
+} of [
+  {
+    name: "src/app + src/prisma without an alias",
+    appDir: "src/app",
+    schemaPath: "src/prisma/schema.prisma",
+    supportRoot: "src",
+  },
+  {
+    name: "root app + root prisma without an alias",
+    appDir: "app",
+    schemaPath: "prisma/schema.prisma",
+    supportRoot: "",
+  },
+]) {
+  test(`${name} uses relative generated imports`, async () => {
+    const projectRoot = await createProject({
+      appDir,
+      schemaPath,
+      withAlias: false,
+    });
+
+    await runCli(projectRoot, "init");
+    await runCli(projectRoot, "generate", "--pages");
+
+    const prefix = supportRoot ? [supportRoot] : [];
+    const smartForm = await readFile(
+      path.join(
+        projectRoot,
+        ...prefix,
+        "components",
+        "form",
+        "SmartForm.tsx",
+      ),
+      "utf8",
+    );
+    const layout = await readFile(
+      path.join(projectRoot, appDir, "admin", "layout.tsx"),
+      "utf8",
+    );
+    const listPage = await readFile(
+      path.join(projectRoot, appDir, "admin", "users", "page.tsx"),
+      "utf8",
+    );
+    const resource = await readFile(
+      path.join(
+        projectRoot,
+        ...prefix,
+        "switchboard",
+        "generated",
+        "UserResource.ts",
+      ),
+      "utf8",
+    );
+    const registry = await readFile(
+      path.join(projectRoot, ...prefix, "switchboard", "registry.ts"),
+      "utf8",
+    );
+
+    assert.match(smartForm, /from "\.\.\/\.\.\/switchboard\/types"/);
+    assert.match(layout, /from "\.\.\/\.\.\/switchboard\/registry"/);
+    assert.match(listPage, /from "\.\.\/\.\.\/\.\.\/lib\/prisma"/);
+    assert.match(
+      listPage,
+      /from "\.\.\/\.\.\/\.\.\/switchboard\/generated\/UserResource"/,
+    );
+    assert.match(
+      listPage,
+      /from "\.\.\/\.\.\/\.\.\/components\/table\/SimpleTable"/,
+    );
+    assert.match(resource, /from "\.\.\/types"/);
+    assert.match(registry, /from "\.\/overrides"/);
+    assert.doesNotMatch(
+      `${smartForm}\n${layout}\n${listPage}\n${resource}\n${registry}`,
+      /from "@\//,
+    );
+  });
+}
 
 test("init skips existing files unless --force is used", async () => {
   const projectRoot = await createProject();
@@ -163,7 +289,7 @@ test("init preserves the admin stylesheet unless --force is used", async () => {
   const dryRunSkipped = await runCli(projectRoot, "init", "--dry-run");
   assert.match(
     dryRunSkipped.stdout,
-    /Skipped src\/app\/admin\/switchboard\.css because it already exists/,
+    /Would skip src\/app\/admin\/switchboard\.css because it already exists; use --force to overwrite/,
   );
 
   const dryRunForced = await runCli(
@@ -202,6 +328,22 @@ test("init --dry-run writes nothing", async () => {
   );
   assert.match(stdout, /Would create src\/lib\/prisma\.ts/);
   assert.match(stdout, /Would create src\/app\/admin\/switchboard\.css/);
+  assert.match(stdout, /Detected project structure:/);
+  assert.match(stdout, /App directory: src\/app/);
+  assert.match(stdout, /Prisma schema: src\/prisma\/schema\.prisma/);
+  assert.match(stdout, /Source root: src/);
+  assert.match(stdout, /Import alias: @\/\* -> \.\/src\/\*/);
+  assert.match(stdout, /Admin auth: User\.username/);
+  assert.match(stdout, /Would create src\/middleware\.ts/);
+  assert.match(stdout, /Would create src\/app\/admin\/login\/page\.tsx/);
+  assert.match(stdout, /auth seed-admin/);
+});
+
+test("init --dry-run reports when relative imports will be used", async () => {
+  const projectRoot = await createProject({ withAlias: false });
+  const { stdout } = await runCli(projectRoot, "init", "--dry-run");
+
+  assert.match(stdout, /Import alias: none \(using relative imports\)/);
 });
 
 test("init supports custom schema and app directories", async () => {
@@ -262,8 +404,101 @@ test("init gives a clear error without a compatible App Router directory", async
   );
 
   await assert.rejects(runCli(projectRoot, "init"), (error) => {
-    assert.match(error.stderr, /No compatible Next\.js App Router directory/);
+    assert.match(error.stderr, /No Next\.js App Router directory found/);
     assert.match(error.stderr, /pass --app-dir <path>/);
     return true;
   });
+});
+
+test("init gives a clear error when no Prisma schema is found", async () => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "switchboard-init-"));
+  tempProjects.push(projectRoot);
+  await mkdir(path.join(projectRoot, "src", "app"), { recursive: true });
+
+  await assert.rejects(runCli(projectRoot, "init"), (error) => {
+    assert.match(error.stderr, /No Prisma schema found/);
+    assert.match(error.stderr, /src\/prisma\/schema\.prisma/);
+    assert.match(error.stderr, /pass --schema <path>/);
+    return true;
+  });
+});
+
+test("init validates manual app and schema overrides", async () => {
+  const projectRoot = await createProject();
+
+  await assert.rejects(
+    runCli(projectRoot, "init", "--app-dir", "missing-app"),
+    (error) => {
+      assert.match(error.stderr, /Invalid --app-dir "missing-app"/);
+      assert.match(error.stderr, /no directory exists/);
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    runCli(projectRoot, "init", "--schema", "missing.prisma"),
+    (error) => {
+      assert.match(error.stderr, /Invalid --schema "missing\.prisma"/);
+      assert.match(error.stderr, /no Prisma schema file exists/);
+      return true;
+    },
+  );
+});
+
+test("init rejects a Prisma schema without the required auth fields", async () => {
+  const projectRoot = await createProject();
+  await writeFile(
+    path.join(projectRoot, "src", "prisma", "schema.prisma"),
+    "model User { id String @id }\n",
+    "utf8",
+  );
+
+  await assert.rejects(runCli(projectRoot, "init"), (error) => {
+    assert.match(error.stderr, /requires an auth-ready User model/);
+    assert.match(error.stderr, /passwordHash/);
+    assert.match(error.stderr, /Switchboard will not modify it automatically/);
+    return true;
+  });
+});
+
+test("init protects an existing middleware unless --force is used", async () => {
+  const projectRoot = await createProject();
+  const middlewarePath = path.join(projectRoot, "src", "middleware.ts");
+  await writeFile(middlewarePath, "// user middleware\n", "utf8");
+
+  await assert.rejects(runCli(projectRoot, "init"), (error) => {
+    assert.match(error.stderr, /Cannot safely protect \/admin/);
+    assert.match(error.stderr, /re-run init with --force/);
+    return true;
+  });
+  assert.equal(await readFile(middlewarePath, "utf8"), "// user middleware\n");
+  await assert.rejects(access(path.join(projectRoot, "src", "lib", "prisma.ts")));
+
+  const forced = await runCli(projectRoot, "init", "--force");
+  assert.match(forced.stdout, /Overwrote src\/middleware\.ts/);
+  assert.match(await readFile(middlewarePath, "utf8"), /\/admin\/:path\*/);
+});
+
+test("init does not create environment or database files", async () => {
+  const projectRoot = await createProject();
+  await runCli(projectRoot, "init");
+
+  const files = [];
+  async function collect(directory) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const entryPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await collect(entryPath);
+      } else {
+        files.push(path.relative(projectRoot, entryPath).replaceAll("\\", "/"));
+      }
+    }
+  }
+  await collect(projectRoot);
+
+  assert.equal(files.some((file) => path.basename(file) === ".env"), false);
+  assert.equal(
+    files.some((file) => /\.(?:db|sqlite|sqlite3)$/.test(file)),
+    false,
+  );
 });

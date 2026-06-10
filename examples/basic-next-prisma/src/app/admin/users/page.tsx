@@ -56,8 +56,16 @@ export default async function UserListPage({ searchParams }: PageProps) {
       header: "Name",
     },
     {
+      key: "username",
+      header: "Username",
+    },
+    {
       key: "email",
       header: "Email",
+    },
+    {
+      key: "passwordHash",
+      header: "PasswordHash",
     },
     {
       key: "role",
