@@ -3,7 +3,9 @@ import type { ResourceConfig } from "@/switchboard/types";
 
 export type UserShape = {
   name: string;
+  username: string;
   email: string;
+  passwordHash: string;
   role?: "ADMIN" | "USER";
 };
 
@@ -20,11 +22,27 @@ export const UserResource: ResourceConfig<UserShape> = {
       },
     },
     {
+      name: "username",
+      label: "Username",
+      required: true,
+      widget: {
+        type: "text",
+      },
+    },
+    {
       name: "email",
       label: "Email",
       required: true,
       widget: {
         type: "email",
+      },
+    },
+    {
+      name: "passwordHash",
+      label: "Password Hash",
+      required: true,
+      widget: {
+        type: "password",
       },
     },
     {
@@ -48,11 +66,28 @@ export const UserResource: ResourceConfig<UserShape> = {
   ],
   list: {
     perPage: 20,
-    searchable: ["name", "email"],
+    searchable: ["name", "username", "email"],
+    sortable: [
+      "id",
+      "name",
+      "username",
+      "email",
+      "role",
+      "createdAt",
+      "updatedAt",
+    ],
     columns: [
+      {
+        key: "id",
+        header: "Id",
+      },
       {
         key: "name",
         header: "Name",
+      },
+      {
+        key: "username",
+        header: "Username",
       },
       {
         key: "email",
@@ -61,6 +96,16 @@ export const UserResource: ResourceConfig<UserShape> = {
       {
         key: "role",
         header: "Role",
+      },
+      {
+        key: "createdAt",
+        header: "Created At",
+        format: "datetime",
+      },
+      {
+        key: "updatedAt",
+        header: "Updated At",
+        format: "datetime",
       },
     ],
     defaultSort: {

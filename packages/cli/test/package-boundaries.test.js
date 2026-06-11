@@ -22,7 +22,7 @@ test("CLI entrypoint remains executable and exposes existing commands", async ()
   assert.match(stdout, /\bgenerate\b/);
 
   const commandNames = createCli().commands.map((command) => command.name());
-  assert.deepEqual(commandNames, ["init", "generate"]);
+  assert.deepEqual(commandNames, ["init", "generate", "auth"]);
 });
 
 test("support templates resolve from the package template directory", async () => {
@@ -33,11 +33,20 @@ test("support templates resolve from the package template directory", async () =
     switchboardDir: "switchboard",
     componentsDir: "components",
     appDir: "app",
+    sourceRoot: ".",
+  }, {
+    clientProperty: "user",
+    credentialField: "username",
+    passwordField: "passwordHash",
+    roleField: "role",
+    idField: "id",
   });
 
   assert.ok(files.some((file) => file.path.endsWith("prisma.ts")));
   assert.ok(files.some((file) => file.path.endsWith("switchboard.css")));
   assert.ok(files.some((file) => file.path.endsWith("SmartForm.tsx")));
+  assert.ok(files.some((file) => file.path.endsWith("auth.ts")));
+  assert.ok(files.some((file) => file.path.endsWith("middleware.ts")));
 });
 
 test("package metadata is ready for the public beta", async () => {

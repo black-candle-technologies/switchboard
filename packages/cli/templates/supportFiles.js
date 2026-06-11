@@ -1,7 +1,25 @@
 import path from "path";
 
-export function supportFiles(layout) {
-  const switchboardImport = "@/switchboard";
+import { importPath } from "../src/project/importPath.js";
+import { adminLayoutTemplate } from "./adminLayout.js";
+import { authSupportFiles } from "./authFiles.js";
+
+export function supportFiles(layout, auth) {
+  const typesPath = path.join(layout.switchboardDir, "types.ts");
+  const overridesPath = path.join(layout.switchboardDir, "overrides.ts");
+  const registryPath = path.join(layout.switchboardDir, "registry.ts");
+  const smartFormPath = path.join(
+    layout.componentsDir,
+    "form",
+    "SmartForm.tsx",
+  );
+  const deleteButtonPath = path.join(
+    layout.componentsDir,
+    "form",
+    "DeleteButton.tsx",
+  );
+  const adminLayoutPath = path.join(layout.appDir, "admin", "layout.tsx");
+  const adminPagePath = path.join(layout.appDir, "admin", "page.tsx");
   return [
     {
       path: path.join(layout.libDir, "prisma.ts"),
@@ -21,15 +39,26 @@ export { prisma };
 `,
     },
     {
-      path: path.join(layout.switchboardDir, "types.ts"),
+      path: typesPath,
       content: `export type TextWidget = { type: "text"; placeholder?: string };
 export type EmailWidget = { type: "email"; placeholder?: string };
+export type PasswordWidget = { type: "password"; placeholder?: string };
+export type NumberWidget = {
+  type: "number";
+  step?: string;
+  placeholder?: string;
+};
 export type TextareaWidget = {
   type: "textarea";
   rows?: number;
   placeholder?: string;
 };
-export type CheckboxWidget = { type: "checkbox" };
+export type JsonWidget = {
+  type: "json";
+  rows?: number;
+  placeholder?: string;
+};
+export type CheckboxWidget = { type: "checkbox"; nullable?: boolean };
 export type DatetimeWidget = { type: "datetime" };
 export type SelectWidget = {
   type: "select";
@@ -45,7 +74,10 @@ export type RelationWidget = {
 export type FieldWidget =
   | TextWidget
   | EmailWidget
+  | PasswordWidget
+  | NumberWidget
   | TextareaWidget
+  | JsonWidget
   | CheckboxWidget
   | DatetimeWidget
   | SelectWidget
@@ -62,14 +94,26 @@ export type FieldConfig = {
 export type ColumnConfig = {
   key: string;
   header?: string;
-  format?: "datetime" | "date" | "boolean";
+  format?: "datetime" | "date" | "boolean" | "json" | "relation";
+  relationField?: string;
+  relationLabelKey?: string;
 };
 export type SortConfig = { key: string; dir: "asc" | "desc" };
 export type ListConfig = {
   perPage?: number;
   searchable?: string[];
+  sortable?: string[];
   columns?: ColumnConfig[];
   defaultSort?: SortConfig;
+};
+
+export type FormActionState = {
+  error?: string;
+};
+
+export type RelationOption = {
+  value: string;
+  label: string;
 };
 
 export type ResourceConfig<T = unknown> = {
@@ -81,8 +125,8 @@ export type ResourceConfig<T = unknown> = {
 `,
     },
     {
-      path: path.join(layout.switchboardDir, "overrides.ts"),
-      content: `import type { ResourceConfig } from "${switchboardImport}/types";
+      path: overridesPath,
+      content: `import type { ResourceConfig } from "${importPath(layout, overridesPath, typesPath)}";
 
 export type ResourcePatch<T = unknown> = Partial<ResourceConfig<T>>;
 
@@ -105,35 +149,48 @@ export const overrides: Readonly<
 `,
     },
     {
-      path: path.join(layout.switchboardDir, "registry.ts"),
-      content: `import type { ResourceConfig } from "${switchboardImport}/types";
+      path: registryPath,
+      content: `import type { ResourceConfig } from "${importPath(layout, registryPath, typesPath)}";
 
 export const resources: ResourceConfig[] = [];
 `,
     },
     {
-      path: path.join(layout.componentsDir, "form", "SmartForm.tsx"),
+      path: smartFormPath,
       content: `"use client";
 
-import type { FieldConfig } from "${switchboardImport}/types";
+import { useActionState } from "react";
+
+import type { FieldConfig } from "${importPath(layout, smartFormPath, typesPath)}";
+import type {
+  FormActionState,
+  RelationOption,
+} from "${importPath(layout, smartFormPath, typesPath)}";
 
 type Props = {
   title: string;
   fields: FieldConfig[];
   initialValues?: Record<string, unknown>;
+  relationOptions?: Record<string, RelationOption[]>;
   submitLabel?: string;
   cancelHref?: string;
-  action: (formData: FormData) => Promise<void>;
+  action: (
+    previousState: FormActionState,
+    formData: FormData,
+  ) => Promise<FormActionState>;
 };
 
 export function SmartForm({
   title,
   fields,
   initialValues = {},
+  relationOptions = {},
   submitLabel = "Save",
   cancelHref,
   action,
 }: Props) {
+  const [state, formAction, isPending] = useActionState(action, {});
+
   return (
     <section className="sb-page sb-page-narrow">
       <div className="sb-page-header">
@@ -142,21 +199,33 @@ export function SmartForm({
           <h1 className="sb-page-title">{title}</h1>
         </div>
       </div>
-      <form action={action} className="sb-card sb-form">
+      <form action={formAction} className="sb-card sb-form">
+        {state.error ? (
+          <p className="sb-form-error" role="alert">
+            {state.error}
+          </p>
+        ) : null}
         {fields.map((field) => {
           const value = initialValues[field.name];
-          if (field.widget.type === "select") {
+          if (
+            field.widget.type === "select" ||
+            field.widget.type === "relation"
+          ) {
+            const options =
+              field.widget.type === "select"
+                ? field.widget.options
+                : (relationOptions[field.name] ?? []);
             return (
-              <label className="sb-form-row" key={field.name}>
-                <span className="sb-label">{field.label}</span>
+              <label className="sb-form-field" key={field.name}>
+                <span className="sb-form-label">{field.label}</span>
                 <select
-                  className="sb-input"
+                  className="sb-form-control sb-select"
                   defaultValue={String(value ?? "")}
                   name={field.name}
                   required={field.required}
                 >
                   <option value="" />
-                  {field.widget.options.map((option) => (
+                  {options.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -165,55 +234,104 @@ export function SmartForm({
               </label>
             );
           }
-          if (field.widget.type === "textarea") {
+          if (
+            field.widget.type === "textarea" ||
+            field.widget.type === "json"
+          ) {
             return (
-              <label className="sb-form-row" key={field.name}>
-                <span className="sb-label">{field.label}</span>
+              <label className="sb-form-field" key={field.name}>
+                <span className="sb-form-label">{field.label}</span>
                 <textarea
-                  className="sb-input"
+                  className="sb-form-control sb-textarea"
                   defaultValue={String(value ?? "")}
                   name={field.name}
                   required={field.required}
-                  rows={field.widget.rows ?? 4}
+                  rows={field.widget.rows ?? 6}
                 />
               </label>
             );
           }
           if (field.widget.type === "checkbox") {
+            if (field.widget.nullable) {
+              return (
+                <label className="sb-form-field" key={field.name}>
+                  <span className="sb-form-label">{field.label}</span>
+                  <select
+                    className="sb-form-control sb-select"
+                    defaultValue={
+                      value === null || value === undefined
+                        ? ""
+                        : String(Boolean(value))
+                    }
+                    name={field.name}
+                    required={field.required}
+                  >
+                    <option value="">Not set</option>
+                    <option value="true">Yes</option>
+                    <option value="false">No</option>
+                  </select>
+                </label>
+              );
+            }
             return (
-              <label className="sb-checkbox-row" key={field.name}>
+              <label
+                className="sb-form-field sb-checkbox-field"
+                key={field.name}
+              >
                 <input
                   className="sb-checkbox"
                   defaultChecked={Boolean(value)}
                   name={field.name}
                   type="checkbox"
+                  value="true"
                 />
-                <span className="sb-label">{field.label}</span>
+                <input name={field.name} type="hidden" value="false" />
+                <span className="sb-form-label">{field.label}</span>
               </label>
             );
           }
           const inputType =
             field.widget.type === "email"
               ? "email"
+              : field.widget.type === "password"
+                ? "password"
+              : field.widget.type === "number"
+                ? "number"
               : field.widget.type === "datetime"
                 ? "datetime-local"
                 : "text";
           return (
-            <label className="sb-form-row" key={field.name}>
-              <span className="sb-label">{field.label}</span>
+            <label className="sb-form-field" key={field.name}>
+              <span className="sb-form-label">{field.label}</span>
               <input
-                className="sb-input"
-                defaultValue={String(value ?? "")}
+                className="sb-form-control"
+                autoComplete={
+                  field.widget.type === "password" ? "new-password" : undefined
+                }
+                defaultValue={
+                  field.widget.type === "password" ? "" : String(value ?? "")
+                }
                 name={field.name}
-                required={field.required}
+                step={
+                  field.widget.type === "number"
+                    ? field.widget.step
+                    : undefined
+                }
+                required={
+                  field.required &&
+                  !(
+                    field.widget.type === "password" &&
+                    Object.keys(initialValues).length > 0
+                  )
+                }
                 type={inputType}
               />
             </label>
           );
         })}
         <div className="sb-form-actions">
-          <button className="sb-button" type="submit">
-            {submitLabel}
+          <button className="sb-button" disabled={isPending} type="submit">
+            {isPending ? "Saving..." : submitLabel}
           </button>
           {cancelHref ? (
             <a className="sb-button sb-button-secondary" href={cancelHref}>
@@ -223,6 +341,60 @@ export function SmartForm({
         </div>
       </form>
     </section>
+  );
+}
+`,
+    },
+    {
+      path: deleteButtonPath,
+      content: `"use client";
+
+import { useActionState } from "react";
+
+import type { FormActionState } from "${importPath(layout, deleteButtonPath, typesPath)}";
+
+type Props = {
+  action: (
+    previousState: FormActionState,
+    formData: FormData,
+  ) => Promise<FormActionState>;
+  idName: string;
+  idValue: string;
+  label?: string;
+};
+
+export function DeleteButton({
+  action,
+  idName,
+  idValue,
+  label = "Delete",
+}: Props) {
+  const [state, formAction, isPending] = useActionState(action, {});
+
+  return (
+    <form
+      action={formAction}
+      className="sb-delete-form"
+      onSubmit={(event) => {
+        if (!window.confirm("Delete this record? This cannot be undone.")) {
+          event.preventDefault();
+        }
+      }}
+    >
+      <input name={idName} type="hidden" value={idValue} />
+      <button
+        className="sb-button-danger"
+        disabled={isPending}
+        type="submit"
+      >
+        {isPending ? "Deleting..." : label}
+      </button>
+      {state.error ? (
+        <span className="sb-delete-error" role="alert">
+          {state.error}
+        </span>
+      ) : null}
+    </form>
   );
 }
 `,
@@ -352,6 +524,12 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 24px;
+}
+
+.sb-admin-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 .sb-admin-brand {
@@ -515,6 +693,12 @@ body {
   text-decoration: none !important;
 }
 
+.sb-button:disabled,
+.sb-button-danger:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .sb-button-secondary {
   border-color: var(--sb-border);
   background: var(--sb-surface);
@@ -572,21 +756,57 @@ body {
 
 .sb-form {
   display: grid;
-  gap: 18px;
-  padding: 22px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  width: 100%;
+  padding: 24px;
 }
 
-.sb-form-row {
+.sb-form-field {
   display: grid;
-  gap: 7px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
 }
 
-.sb-label {
+.sb-form-label {
+  display: block;
+  color: var(--sb-text);
   font-size: 14px;
   font-weight: 650;
+  line-height: 1.4;
 }
 
-.sb-checkbox-row {
+.sb-form-control {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid #cbd3dc;
+  border-radius: 8px;
+  background: var(--sb-surface);
+  color: var(--sb-text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.sb-form-control:focus {
+  border-color: var(--sb-accent);
+  outline: 3px solid rgba(29, 78, 216, 0.14);
+}
+
+.sb-select {
+  appearance: auto;
+}
+
+.sb-textarea {
+  min-height: 140px;
+  resize: vertical;
+}
+
+.sb-checkbox-field {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -599,7 +819,56 @@ body {
 }
 
 .sb-form-actions {
-  padding-top: 4px;
+  flex-wrap: wrap;
+  padding-top: 18px;
+  border-top: 1px solid var(--sb-border);
+}
+
+.sb-form-error {
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid #f0b4ae;
+  border-radius: 8px;
+  background: #fff4f2;
+  color: var(--sb-danger);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sb-login-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  background: var(--sb-bg);
+  color: var(--sb-text);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+.sb-login-card {
+  display: grid;
+  gap: 20px;
+  width: min(100%, 440px);
+  padding: 28px;
+}
+
+.sb-login-form {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+.sb-login-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #f0b4ae;
+  border-radius: 8px;
+  background: #fff4f2;
+  color: var(--sb-danger);
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .sb-table-wrap {
@@ -633,6 +902,42 @@ body {
   padding: 13px 14px;
   border-bottom: 1px solid #edf0f3;
   vertical-align: middle;
+}
+
+.sb-table-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 5px 9px;
+  border: 1px solid var(--sb-border);
+  border-radius: 7px;
+  background: var(--sb-surface);
+  color: var(--sb-accent);
+  font-weight: 650;
+}
+
+.sb-table-action:hover {
+  border-color: #b9c2cc;
+  background: var(--sb-surface-muted);
+  text-decoration: none !important;
+}
+
+.sb-null-value {
+  color: var(--sb-muted);
+  font-style: italic;
+}
+
+.sb-delete-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sb-delete-error {
+  max-width: 240px;
+  color: var(--sb-danger);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .sb-table tbody tr:last-child td {
@@ -702,61 +1007,21 @@ body {
   .sb-search-form .sb-button {
     width: 100%;
   }
-}
-`,
-    },
-    {
-      path: path.join(layout.appDir, "admin", "layout.tsx"),
-      content: `import "./switchboard.css";
-import Link from "next/link";
-import { resources } from "${switchboardImport}/registry";
 
-export default function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="sb-admin-shell">
-      <header className="sb-admin-header">
-        <nav className="sb-admin-nav">
-          <Link className="sb-admin-brand" href="/admin">
-            Switchboard
-          </Link>
-          <Link className="sb-admin-home-link" href="/">
-            Back to site
-          </Link>
-        </nav>
-      </header>
-      <main className="sb-admin-main">
-          <aside className="sb-admin-sidebar">
-            <nav className="sb-resource-nav" aria-label="Admin resources">
-              <h2 className="sb-resource-nav-title">Resources</h2>
-              <ul className="sb-resource-list">
-                {resources.map((resource) => (
-                  <li key={resource.resource}>
-                    <Link
-                      className="sb-resource-link"
-                      href={"/admin/" + resource.resource.toLowerCase() + "s"}
-                    >
-                      {resource.displayName}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </nav>
-          </aside>
-          <section className="sb-admin-content">{children}</section>
-      </main>
-    </div>
-  );
+  .sb-admin-nav-actions {
+    gap: 8px;
+  }
 }
 `,
     },
     {
-      path: path.join(layout.appDir, "admin", "page.tsx"),
+      path: adminLayoutPath,
+      content: adminLayoutTemplate(layout, adminLayoutPath, registryPath),
+    },
+    {
+      path: adminPagePath,
       content: `import Link from "next/link";
-import { resources } from "${switchboardImport}/registry";
+import { resources } from "${importPath(layout, adminPagePath, registryPath)}";
 
 export default function AdminIndex() {
   return (
@@ -797,5 +1062,6 @@ export default function AdminIndex() {
 }
 `,
     },
+    ...authSupportFiles(layout, auth),
   ];
 }

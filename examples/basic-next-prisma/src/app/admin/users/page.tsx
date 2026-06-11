@@ -2,58 +2,148 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
+import { DeleteButton } from "@/components/form/DeleteButton";
 import { UserResource } from "@/switchboard/generated/UserResource";
-import type { Column } from "@/components/table/SimpleTable";
-import type { User, Prisma } from "@prisma/client";
+import { Prisma, type User } from "@prisma/client";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type PageProps = { searchParams: Promise<SearchParams> };
+type GeneratedColumn = {
+  key: string;
+  header?: string;
+  format?: "datetime" | "date" | "boolean" | "json" | "relation";
+  relationField?: string;
+  relationLabelKey?: string;
+};
+type ListRow = User;
+
+function actionErrorMessage(error: unknown, operation: "save" | "delete") {
+  console.error(`Switchboard failed to ${operation} User:`, error);
+  if (error instanceof SyntaxError) {
+    return "A JSON field contains invalid JSON.";
+  }
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === "P2002") {
+      return "A record with that unique value already exists.";
+    }
+    if (error.code === "P2003") {
+      return operation === "delete"
+        ? "This record cannot be deleted because other records still reference it."
+        : "A selected related record no longer exists.";
+    }
+    if (error.code === "P2025") return "This record no longer exists.";
+  }
+  return operation === "delete"
+    ? "The record could not be deleted."
+    : "The record could not be saved. Check the values and try again.";
+}
+
+function displayValue(value: unknown, format?: GeneratedColumn["format"]) {
+  if (value === null || value === undefined || value === "") {
+    return <span className="sb-null-value">Not set</span>;
+  }
+  if (format === "boolean") return value ? "Yes" : "No";
+  if (format === "datetime" || format === "date") {
+    const date = value instanceof Date ? value : new Date(String(value));
+    if (Number.isNaN(date.getTime())) return String(value);
+    return format === "date"
+      ? date.toLocaleDateString()
+      : date.toLocaleString();
+  }
+  if (format === "json" || typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
 
 export default async function UserListPage({ searchParams }: PageProps) {
   const params = await searchParams;
-  const q = typeof params.q === "string" ? params.q.trim() : "";
-  const page = Number(params.page ?? 1) || 1;
-  const take = UserResource.list?.perPage ?? 20;
-  const skip = (page - 1) * take;
+  const q = typeof params.q === "string" ? params.q.trim().slice(0, 200) : "";
+  const requestedPage = Number(
+    typeof params.page === "string" ? params.page : "1",
+  );
+  const safeRequestedPage =
+    Number.isSafeInteger(requestedPage) && requestedPage > 0
+      ? requestedPage
+      : 1;
+  const configuredTake = UserResource.list?.perPage ?? 20;
+  const take = Math.min(100, Math.max(1, Math.trunc(configuredTake)));
 
-  // Sorting
-  const defaultSortKey = "createdAt";
-  const defaultSortDir: "asc" | "desc" = "desc";
-  const sortKey =
-    typeof params.sort === "string" ? params.sort : defaultSortKey;
+  const supportedSearchFields = new Set(["name", "username", "email"]);
+  const searchable = (
+    UserResource.list?.searchable ?? ["name", "username", "email"]
+  ).filter((field) => supportedSearchFields.has(field));
+  const supportedSortFields = new Set([
+    "id",
+    "name",
+    "username",
+    "email",
+    "role",
+    "createdAt",
+    "updatedAt",
+  ]);
+  const sortable = (
+    UserResource.list?.sortable ?? [
+      "id",
+      "name",
+      "username",
+      "email",
+      "role",
+      "createdAt",
+      "updatedAt",
+    ]
+  ).filter((field) => supportedSortFields.has(field));
+  const configuredDefaultSort = UserResource.list?.defaultSort;
+  const defaultSortKey =
+    configuredDefaultSort && sortable.includes(configuredDefaultSort.key)
+      ? configuredDefaultSort.key
+      : "";
+  const defaultSortDir: "asc" | "desc" =
+    configuredDefaultSort?.dir === "asc" ? "asc" : "desc";
+  const requestedSort = typeof params.sort === "string" ? params.sort : "";
+  const sortKey = sortable.includes(requestedSort)
+    ? requestedSort
+    : defaultSortKey;
   const sortDir =
     params.dir === "asc" || params.dir === "desc" ? params.dir : defaultSortDir;
-  const orderBy = (sortKey ? { [sortKey]: sortDir } : { createdAt: "desc" }) as
+  const orderBy = (sortKey ? { [sortKey]: sortDir } : undefined) as
     | Prisma.UserOrderByWithRelationInput
     | undefined;
-
-  // Search
-  const searchable = UserResource.list?.searchable ?? [];
   const where = (
     q && searchable.length
-      ? { OR: searchable.map((field) => ({ [field]: { contains: q } })) }
+      ? {
+          OR: searchable.map((field) => ({
+            [field]: { contains: q },
+          })),
+        }
       : {}
   ) as Prisma.UserWhereInput;
 
-  const [items, total] = await Promise.all([
-    prisma.user.findMany({
-      where,
-      orderBy,
-      skip,
-      take,
-    }),
-    prisma.user.count({ where }),
-  ]);
-
-  type GeneratedColumn = {
-    key: string;
-    header?: string;
-    format?: "datetime" | "date" | "boolean";
-  };
-  const generatedColumns = (UserResource.list?.columns ?? [
+  const total = await prisma.user.count({ where });
+  const totalPages = Math.max(1, Math.ceil(total / take));
+  const page = Math.min(safeRequestedPage, totalPages);
+  const items: ListRow[] = await prisma.user.findMany({
+    where,
+    orderBy,
+    skip: (page - 1) * take,
+    take,
+  });
+  const columns = (UserResource.list?.columns ?? [
+    {
+      key: "id",
+      header: "Id",
+    },
     {
       key: "name",
       header: "Name",
+    },
+    {
+      key: "username",
+      header: "Username",
     },
     {
       key: "email",
@@ -63,70 +153,69 @@ export default async function UserListPage({ searchParams }: PageProps) {
       key: "role",
       header: "Role",
     },
+    {
+      key: "createdAt",
+      header: "Created At",
+      format: "datetime",
+    },
+    {
+      key: "updatedAt",
+      header: "Updated At",
+      format: "datetime",
+    },
   ]) as readonly GeneratedColumn[];
 
-  const columns: Column<User>[] = generatedColumns.map((column) => {
-    const baseColumn: Column<User> = {
-      key: column.key,
-      header: column.header,
-    };
-    if (column.format === "datetime") {
-      return {
-        ...baseColumn,
-        cell: (row) =>
-          new Date(
-            String((row as unknown as Record<string, unknown>)[column.key]),
-          ).toLocaleString(),
-      };
-    }
-    if (column.format === "date") {
-      return {
-        ...baseColumn,
-        cell: (row) =>
-          new Date(
-            String((row as unknown as Record<string, unknown>)[column.key]),
-          ).toLocaleDateString(),
-      };
-    }
-    if (column.format === "boolean") {
-      return {
-        ...baseColumn,
-        cell: (row) =>
-          (row as unknown as Record<string, unknown>)[column.key]
-            ? "Yes"
-            : "No",
-      };
-    }
-    return baseColumn;
-  });
-
-  async function del(formData: FormData) {
+  async function del(_previousState: { error?: string }, formData: FormData) {
     "use server";
-    const id = String(formData.get("id"));
-    await prisma.user.delete({
-      where: { id: id },
-    });
+    try {
+      const rawId = formData.get("id");
+      if (typeof rawId !== "string" || !rawId) {
+        return { error: "The record identifier is missing." };
+      }
+      await prisma.user.delete({
+        where: { id: rawId },
+      });
+    } catch (error) {
+      return { error: actionErrorMessage(error, "delete") };
+    }
     revalidatePath("/admin/users");
+    return {};
   }
 
-  const totalPages = Math.max(1, Math.ceil(total / take));
-
-  const qs = (next: Record<string, string | number>) => {
-    const p = new URLSearchParams();
-    if (q) p.set("q", q);
-    p.set("page", String(next.page ?? page));
-    p.set("sort", String(next.sort ?? sortKey));
-    p.set("dir", String(next.dir ?? sortDir));
-    return `?${p.toString()}`;
+  const queryString = (
+    next: Partial<{
+      page: number;
+      sort: string;
+      dir: "asc" | "desc";
+    }>,
+  ) => {
+    const query = new URLSearchParams();
+    if (q) query.set("q", q);
+    query.set("page", String(next.page ?? page));
+    const nextSort = next.sort ?? sortKey;
+    if (nextSort && sortable.includes(nextSort)) {
+      query.set("sort", nextSort);
+      query.set("dir", next.dir ?? sortDir);
+    }
+    return `?${query.toString()}`;
   };
 
-  const headerLink = (key: string, label?: string) => {
-    const active = sortKey === key;
+  const header = (column: GeneratedColumn) => {
+    if (!sortable.includes(column.key)) {
+      return column.header ?? column.key;
+    }
+    const active = sortKey === column.key;
     const nextDir = active && sortDir === "asc" ? "desc" : "asc";
-    const base = `/admin/users${qs({ page: 1, sort: key, dir: active ? nextDir : "asc" })}`;
     return (
-      <a href={base} className="sb-action-link">
-        {label ?? key}
+      <a
+        className="sb-action-link"
+        href={queryString({
+          page: 1,
+          sort: column.key,
+          dir: nextDir,
+        })}
+      >
+        {column.header ?? column.key}
         {active ? (sortDir === "asc" ? " (asc)" : " (desc)") : ""}
       </a>
     );
@@ -147,106 +236,122 @@ export default async function UserListPage({ searchParams }: PageProps) {
         </Link>
       </div>
 
-      {/* Search */}
-      <form method="get" className="sb-search-form">
-        <input
-          type="text"
-          name="q"
-          defaultValue={q}
-          placeholder={
-            "Search " + (UserResource.list?.searchable ?? []).join(", ")
-          }
-          className="sb-input"
-        />
-        <input type="hidden" name="sort" value={sortKey} />
-        <input type="hidden" name="dir" value={sortDir} />
-        <button className="sb-button sb-button-secondary" type="submit">
-          Search
-        </button>
-      </form>
+      {searchable.length ? (
+        <form method="get" className="sb-search-form">
+          <input
+            type="search"
+            name="q"
+            defaultValue={q}
+            placeholder={"Search " + searchable.join(", ")}
+            className="sb-input"
+          />
+          {sortKey ? <input type="hidden" name="sort" value={sortKey} /> : null}
+          {sortKey ? <input type="hidden" name="dir" value={sortDir} /> : null}
+          <button className="sb-button sb-button-secondary" type="submit">
+            Search
+          </button>
+          {q ? (
+            <Link className="sb-action-link" href="/admin/users">
+              Clear
+            </Link>
+          ) : null}
+        </form>
+      ) : null}
 
       <div className="sb-table-wrap">
         <table className="sb-table">
           <thead>
             <tr>
-              {columns.map((c) => (
-                <th key={String(c.key)}>
-                  {headerLink(String(c.key), c.header)}
-                </th>
+              {columns.map((column) => (
+                <th key={column.key}>{header(column)}</th>
               ))}
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {items.map((row) => (
-              <tr key={String((row as unknown as Record<string, unknown>).id)}>
-                {columns.map((c) => (
-                  <td key={String(c.key)}>
-                    {c.cell
-                      ? c.cell(row)
-                      : String(
-                          (row as unknown as Record<string, unknown>)[c.key] ??
-                            "",
-                        )}
-                  </td>
-                ))}
-                <td>
-                  <div className="sb-actions">
-                    <Link
-                      className="sb-action-link"
-                      href={
-                        "/admin/users/" +
-                        String((row as unknown as Record<string, unknown>).id) +
-                        "/edit"
-                      }
-                    >
-                      Edit
-                    </Link>
-                    <form action={del}>
-                      <input
-                        type="hidden"
-                        name="id"
-                        value={String(
-                          (row as unknown as Record<string, unknown>).id,
-                        )}
+            {items.map((row) => {
+              const values = row as unknown as Record<string, unknown>;
+              return (
+                <tr key={String(values.id)}>
+                  {columns.map((column) => {
+                    const related =
+                      column.format === "relation" && column.relationField
+                        ? (values[column.relationField] as
+                            | Record<string, unknown>
+                            | null
+                            | undefined)
+                        : undefined;
+                    const value =
+                      related && column.relationLabelKey
+                        ? related[column.relationLabelKey]
+                        : values[column.key];
+                    return (
+                      <td key={column.key}>
+                        {displayValue(value, column.format)}
+                      </td>
+                    );
+                  })}
+                  <td>
+                    <div className="sb-actions">
+                      <Link
+                        className="sb-table-action"
+                        href={
+                          "/admin/users/" +
+                          encodeURIComponent(String(values.id)) +
+                          "/edit"
+                        }
+                      >
+                        Edit
+                      </Link>
+                      <DeleteButton
+                        action={del}
+                        idName="id"
+                        idValue={String(values.id)}
                       />
-                      <button type="submit" className="sb-button-danger">
-                        Delete
-                      </button>
-                    </form>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {items.length === 0 && (
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {items.length === 0 ? (
               <tr>
                 <td className="sb-empty-state" colSpan={columns.length + 1}>
-                  No records found.
+                  {q
+                    ? `No user records match "${q}".`
+                    : "No user records yet. Create one to get started."}
                 </td>
               </tr>
-            )}
+            ) : null}
           </tbody>
         </table>
       </div>
 
-      {/* Pagination */}
       <div className="sb-pagination">
         <span>
-          Page {page} of {totalPages}
+          Page {page} of {totalPages} ({total}{" "}
+          {total === 1 ? "record" : "records"})
         </span>
         <div className="sb-pagination-actions">
-          <a
-            className={`sb-pagination-link ${page <= 1 ? "sb-is-disabled" : ""}`}
-            href={qs({ page: Math.max(1, page - 1) })}
-          >
-            Prev
-          </a>
-          <a
-            className={`sb-pagination-link ${page >= totalPages ? "sb-is-disabled" : ""}`}
-            href={qs({ page: Math.min(totalPages, page + 1) })}
-          >
-            Next
-          </a>
+          {page > 1 ? (
+            <a
+              className="sb-pagination-link"
+              href={queryString({ page: page - 1 })}
+            >
+              Previous
+            </a>
+          ) : (
+            <span className="sb-pagination-link sb-is-disabled">Previous</span>
+          )}
+          {page < totalPages ? (
+            <a
+              className="sb-pagination-link"
+              href={queryString({ page: page + 1 })}
+            >
+              Next
+            </a>
+          ) : (
+            <span className="sb-pagination-link sb-is-disabled">Next</span>
+          )}
         </div>
       </div>
     </section>

@@ -1,11 +1,18 @@
+import "./switchboard.css";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { resources } from "@/switchboard/registry";
 
-export default function AdminLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const requestHeaders = await headers();
+  if (requestHeaders.get("x-switchboard-login-page") === "1") {
+    return <div className="sb-login-shell">{children}</div>;
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
       <header className="border-b bg-white">
@@ -16,6 +23,9 @@ export default function AdminLayout({
           <div className="space-x-4">
             <Link href="/admin" className="text-sm hover:underline">
               Admin
+            </Link>
+            <Link href="/admin/logout" className="text-sm hover:underline">
+              Logout
             </Link>
           </div>
         </nav>
