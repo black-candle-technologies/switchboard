@@ -45,6 +45,10 @@ Open `http://localhost:3000/admin`.
 Run the normal Prisma migration and client generation commands before starting
 the app. `init` supports both `src/app` and root `app` projects.
 
+The default admin login is:
+User: admin
+Password: password
+
 ## Example App
 
 The repository includes a complete outsider-style example at
