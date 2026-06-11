@@ -10,11 +10,15 @@ published as
 From an existing Next.js App Router and Prisma project:
 
 ```bash
-npm install --save-dev @lanebucher/switchboard
+npm install -D @lanebucher/switchboard@beta
 npx switchboard init
 npx switchboard generate --pages
 npm run dev
 ```
+
+> **Beta warning:** Switchboard is in early beta. Test it in a branch first and
+> use `--dry-run` before writing generated files. Change any default admin
+> credentials in the host project before deploying to production.
 
 Before generation, configure Prisma normally. For SQLite:
 

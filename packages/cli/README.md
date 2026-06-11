@@ -1,6 +1,6 @@
 # @lanebucher/switchboard
 
-Version 0.4.2
+Version 0.6.0-beta.1
 
 Switchboard generates Prisma-backed resource configuration and optional
 Next.js App Router admin pages.
@@ -15,8 +15,12 @@ Next.js App Router admin pages.
 ## Installation
 
 ```bash
-npm install --save-dev @lanebucher/switchboard
+npm install -D @lanebucher/switchboard@beta
 ```
+
+> **Beta warning:** Switchboard is in early beta. Test it in a branch first and
+> use `--dry-run` before writing generated files. Change any default admin
+> credentials in the host project before deploying to production.
 
 ## Quick Start
 
@@ -30,7 +34,7 @@ DATABASE_URL="file:./dev.db"
 Then run:
 
 ```bash
-npm install --save-dev @lanebucher/switchboard
+npm install -D @lanebucher/switchboard@beta
 npx switchboard init
 npx switchboard generate --pages
 npm run dev

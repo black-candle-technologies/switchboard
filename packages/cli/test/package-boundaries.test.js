@@ -40,12 +40,30 @@ test("support templates resolve from the package template directory", async () =
   assert.ok(files.some((file) => file.path.endsWith("SmartForm.tsx")));
 });
 
-test("package metadata includes runtime source and templates", async () => {
+test("package metadata is ready for the public beta", async () => {
   const packageJson = JSON.parse(
     await readFile(path.join(packageRoot, "package.json"), "utf8"),
   );
 
-  assert.ok(packageJson.files.includes("bin/"));
-  assert.ok(packageJson.files.includes("src/"));
-  assert.ok(packageJson.files.includes("templates/"));
+  assert.equal(packageJson.name, "@lanebucher/switchboard");
+  assert.equal(packageJson.version, "0.6.0-beta.1");
+  assert.equal(
+    packageJson.description,
+    "Generate Prisma-backed admin resources and Next.js App Router pages.",
+  );
+  assert.equal(packageJson.bin.switchboard, "bin/switchboard.js");
+  assert.equal(
+    packageJson.repository.url,
+    "git+https://github.com/black-candle-technologies/switchboard.git",
+  );
+  assert.equal(packageJson.license, "MIT");
+  assert.deepEqual(packageJson.files, [
+    "bin/",
+    "src/",
+    "templates/",
+    "README.md",
+    "LICENSE",
+  ]);
+  assert.ok(packageJson.keywords.includes("nextjs"));
+  assert.ok(packageJson.keywords.includes("prisma"));
 });
