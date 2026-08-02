@@ -8,7 +8,7 @@ export function createCli() {
   const program = new Command()
     .name("switchboard")
     .description("CLI for generating Switchboard admin resources and pages")
-    .version("0.6.0-beta.1");
+    .version("0.6.0-beta.2");
 
   registerInitCommand(program);
   registerGenerateCommand(program);

@@ -200,6 +200,16 @@ export function authSupportFiles(layout, auth) {
           );
           redirect("/admin");
         }
+
+        export async function logout() {
+          const cookieStore = await cookies();
+          cookieStore.set(SWITCHBOARD_SESSION_COOKIE, "", {
+            ...sessionCookieOptions(),
+            expires: new Date(0),
+            maxAge: 0,
+          });
+          redirect("/admin/login");
+        }
       `,
     },
     {
@@ -284,6 +294,7 @@ export function authSupportFiles(layout, auth) {
           );
           response.cookies.set(SWITCHBOARD_SESSION_COOKIE, "", {
             ...sessionCookieOptions(),
+            expires: new Date(0),
             maxAge: 0,
           });
           return response;

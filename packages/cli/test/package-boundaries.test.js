@@ -55,7 +55,7 @@ test("package metadata is ready for the public beta", async () => {
   );
 
   assert.equal(packageJson.name, "@lanebucher/switchboard");
-  assert.equal(packageJson.version, "0.6.0-beta.1");
+  assert.equal(packageJson.version, "0.6.0-beta.2");
   assert.equal(
     packageJson.description,
     "Generate Prisma-backed admin resources and Next.js App Router pages.",

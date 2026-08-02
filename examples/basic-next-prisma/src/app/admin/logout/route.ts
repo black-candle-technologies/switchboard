@@ -10,6 +10,7 @@ export function GET(request: NextRequest) {
   const response = NextResponse.redirect(new URL("/admin/login", request.url));
   response.cookies.set(SWITCHBOARD_SESSION_COOKIE, "", {
     ...sessionCookieOptions(),
+    expires: new Date(0),
     maxAge: 0,
   });
   return response;

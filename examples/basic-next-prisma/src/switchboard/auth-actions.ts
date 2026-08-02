@@ -43,3 +43,13 @@ export async function login(formData: FormData) {
   );
   redirect("/admin");
 }
+
+export async function logout() {
+  const cookieStore = await cookies();
+  cookieStore.set(SWITCHBOARD_SESSION_COOKIE, "", {
+    ...sessionCookieOptions(),
+    expires: new Date(0),
+    maxAge: 0,
+  });
+  redirect("/admin/login");
+}

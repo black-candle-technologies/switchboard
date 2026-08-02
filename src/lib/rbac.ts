@@ -8,7 +8,7 @@ export type UserContext = {
 
 export const Policy = {
   users: {
-    canList: (_ctx: UserContext) => true,
+    canList: () => true,
     canCreate: (ctx: UserContext) => ctx.role === "ADMIN" || ctx.role === "MANAGER",
     canUpdate: (ctx: UserContext) => ctx.role === "ADMIN" || ctx.role === "MANAGER",
     canDelete: (ctx: UserContext) => ctx.role === "ADMIN",

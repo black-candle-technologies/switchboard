@@ -1,5 +1,6 @@
 # Switchboard
 
+## NOT STABLE
 Switchboard is a Next.js, Prisma, and TypeScript project for generating
 database-backed admin resources and routes from a Prisma schema. The CLI is
 published as

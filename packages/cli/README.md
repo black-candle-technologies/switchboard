@@ -1,6 +1,6 @@
 # @lanebucher/switchboard
 
-Version 0.6.0-beta.1
+Version 0.6.0-beta.2
 
 Switchboard generates Prisma-backed resource configuration and optional
 Next.js App Router admin pages.

@@ -73,7 +73,7 @@ Confirm that the package contains only `bin`, `src`, `templates`, `README.md`,
 `LICENSE`, and `package.json`. Tests, fixtures, example databases, environment
 files, and local build artifacts must not be included.
 
-For the `0.6.0-beta.1` public beta, publish with:
+For the `0.6.0-beta.2` public beta, publish with:
 
 ```bash
 npm publish --access public --tag beta
