@@ -202,15 +202,18 @@ test("generated auth rejects non-admin roles and protects all admin routes", asy
   assert.match(middleware, /payload\.role === "ADMIN"/);
   assert.match(actions, /export async function logout\(\)/);
   assert.match(actions, /expires: new Date\(0\)/);
+  assert.match(actions, /maxAge: 0/);
   assert.match(adminLayout, /import \{ logout \}/);
   assert.match(adminLayout, /<form action=\{logout\}>/);
   assert.match(adminLayout, /type="submit"/);
-  const logoutRoute = await readFile(
-    path.join(projectRoot, "src", "app", "admin", "logout", "route.ts"),
-    "utf8",
+  await assert.rejects(
+    readFile(
+      path.join(projectRoot, "src", "app", "admin", "logout", "route.ts"),
+      "utf8",
+    ),
+    { code: "ENOENT" },
   );
-  assert.match(logoutRoute, /expires: new Date\(0\)/);
-  assert.match(logoutRoute, /maxAge: 0/);
+  assert.doesNotMatch(middleware, /admin\/logout/);
   assert.match(logs.join("\n"), /default admin\/password is insecure/i);
 });
 

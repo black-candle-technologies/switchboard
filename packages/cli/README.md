@@ -7,7 +7,7 @@ Next.js App Router admin pages.
 
 ## Requirements
 
-- Node.js 18 or newer
+- Node.js 20.9.0 or newer
 - A Next.js and Prisma project using TypeScript
 - A Prisma schema at `src/prisma/schema.prisma` or `prisma/schema.prisma`
 
@@ -170,7 +170,6 @@ src/
         |-- switchboard.css
         |-- layout.tsx
         |-- login/page.tsx
-        |-- logout/route.ts
         `-- page.tsx
 ```
 

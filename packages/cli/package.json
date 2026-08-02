@@ -33,10 +33,11 @@
   },
   "homepage": "https://github.com/black-candle-technologies/switchboard#readme",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "tag": "beta"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.9.0"
   },
   "dependencies": {
     "chalk": "^5.3.0",

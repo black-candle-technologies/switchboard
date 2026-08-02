@@ -60,7 +60,7 @@ npm run example:smoke
 
 Requirements:
 
-- Node.js 18 or newer
+- Node.js 20.9.0 or newer
 - npm
 
 Set up the repository:
@@ -229,7 +229,6 @@ src/app/admin/switchboard.css
 src/app/admin/layout.tsx
 src/app/admin/page.tsx
 src/app/admin/login/page.tsx
-src/app/admin/logout/route.ts
 ```
 
 Root `app` projects receive the same structure without the `src/` prefix.

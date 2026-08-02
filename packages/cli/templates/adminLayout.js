@@ -29,7 +29,7 @@ export function adminLayoutTemplate(layout, layoutPath, registryPath) {
       return (
         <div className="sb-admin-shell">
           <header className="sb-admin-header">
-            <nav className="sb-admin-nav">
+            <nav className="sb-admin-nav" aria-label="Primary">
               <Link className="sb-admin-brand" href="/admin">
                 Switchboard
               </Link>

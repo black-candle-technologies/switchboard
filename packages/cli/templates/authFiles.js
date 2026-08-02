@@ -13,12 +13,6 @@ export function authSupportFiles(layout, auth) {
     "login",
     "page.tsx",
   );
-  const logoutRoutePath = path.join(
-    layout.appDir,
-    "admin",
-    "logout",
-    "route.ts",
-  );
   const middlewarePath = path.join(layout.sourceRoot, "middleware.ts");
 
   return [
@@ -278,30 +272,6 @@ export function authSupportFiles(layout, auth) {
       `,
     },
     {
-      path: logoutRoutePath,
-      content: `
-        // ${GENERATED_FILE_MARKER}
-        import { NextRequest, NextResponse } from "next/server";
-
-        import {
-          sessionCookieOptions,
-          SWITCHBOARD_SESSION_COOKIE,
-        } from "${importPath(layout, logoutRoutePath, authPath)}";
-
-        export function GET(request: NextRequest) {
-          const response = NextResponse.redirect(
-            new URL("/admin/login", request.url),
-          );
-          response.cookies.set(SWITCHBOARD_SESSION_COOKIE, "", {
-            ...sessionCookieOptions(),
-            expires: new Date(0),
-            maxAge: 0,
-          });
-          return response;
-        }
-      `,
-    },
-    {
       path: middlewarePath,
       securityCritical: true,
       content: `
@@ -367,8 +337,6 @@ export function authSupportFiles(layout, auth) {
         export async function middleware(request: NextRequest) {
           sessionSecret();
           const isLoginPage = request.nextUrl.pathname === LOGIN_PATH;
-          const isLogoutRoute =
-            request.nextUrl.pathname === "/admin/logout";
           const hasSession = await hasValidAdminSession(request);
 
           if (isLoginPage) {
@@ -380,10 +348,6 @@ export function authSupportFiles(layout, auth) {
             return NextResponse.next({
               request: { headers: requestHeaders },
             });
-          }
-
-          if (isLogoutRoute) {
-            return NextResponse.next();
           }
 
           if (!hasSession) {

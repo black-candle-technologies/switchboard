@@ -23,6 +23,15 @@ test("CLI entrypoint remains executable and exposes existing commands", async ()
 
   const commandNames = createCli().commands.map((command) => command.name());
   assert.deepEqual(commandNames, ["init", "generate", "auth"]);
+
+  const { stdout: versionOutput } = await execFileAsync(process.execPath, [
+    cliPath,
+    "--version",
+  ]);
+  const packageJson = JSON.parse(
+    await readFile(path.join(packageRoot, "package.json"), "utf8"),
+  );
+  assert.equal(versionOutput.trim(), packageJson.version);
 });
 
 test("support templates resolve from the package template directory", async () => {
@@ -73,6 +82,54 @@ test("package metadata is ready for the public beta", async () => {
     "README.md",
     "LICENSE",
   ]);
+  assert.deepEqual(packageJson.publishConfig, {
+    access: "public",
+    tag: "beta",
+  });
+  assert.equal(packageJson.engines.node, ">=20.9.0");
   assert.ok(packageJson.keywords.includes("nextjs"));
   assert.ok(packageJson.keywords.includes("prisma"));
+
+  const npmCommand = process.env.npm_execpath ? process.execPath : "npm";
+  const npmArguments = process.env.npm_execpath
+    ? [
+        process.env.npm_execpath,
+        "pack",
+        "--dry-run",
+        "--ignore-scripts",
+        "--json",
+      ]
+    : ["pack", "--dry-run", "--ignore-scripts", "--json"];
+  const { stdout } = await execFileAsync(
+    npmCommand,
+    npmArguments,
+    { cwd: packageRoot },
+  );
+  const [packResult] = JSON.parse(stdout);
+  const packedPaths = packResult.files
+    .map((file) => file.path)
+    .sort((left, right) => left.localeCompare(right));
+  const expectedPaths = [
+    "LICENSE",
+    "README.md",
+    "bin/switchboard.js",
+    "package.json",
+    "src/auth/password.js",
+    "src/auth/schema.js",
+    "src/cli.js",
+    "src/commands/auth.js",
+    "src/commands/generate.js",
+    "src/commands/init.js",
+    "src/generator/generateProject.js",
+    "src/generator/runtimeTemplates.js",
+    "src/parser/prismaSchemaParser.js",
+    "src/project/detectProject.js",
+    "src/project/importPath.js",
+    "src/utils/fileActions.js",
+    "src/utils/fs.js",
+    "templates/adminLayout.js",
+    "templates/authFiles.js",
+    "templates/supportFiles.js",
+  ].sort((left, right) => left.localeCompare(right));
+  assert.deepEqual(packedPaths, expectedPaths);
 });

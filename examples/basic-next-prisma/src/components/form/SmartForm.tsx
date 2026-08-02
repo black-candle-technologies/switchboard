@@ -55,7 +55,7 @@ export function SmartForm({
         control.value = values[0] ?? "";
       }
     }
-  }, [fields, state.error]);
+  }, [fields, state]);
 
   return (
     <section className="sb-page sb-page-narrow">

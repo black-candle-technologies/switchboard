@@ -11,6 +11,9 @@
     "url": "https://github.com/black-candle-technologies/switchboard/issues"
   },
   "homepage": "https://github.com/black-candle-technologies/switchboard#readme",
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
@@ -48,6 +51,6 @@
   },
   "overrides": {
     "postcss": "^8.5.18",
-    "sharp": "^0.35.0"
+    "sharp": "0.35.3"
   }
 }
