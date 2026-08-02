@@ -58,7 +58,6 @@ async function hasValidAdminSession(request: NextRequest) {
 export async function middleware(request: NextRequest) {
   sessionSecret();
   const isLoginPage = request.nextUrl.pathname === LOGIN_PATH;
-  const isLogoutRoute = request.nextUrl.pathname === "/admin/logout";
   const hasSession = await hasValidAdminSession(request);
 
   if (isLoginPage) {
@@ -70,10 +69,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next({
       request: { headers: requestHeaders },
     });
-  }
-
-  if (isLogoutRoute) {
-    return NextResponse.next();
   }
 
   if (!hasSession) {

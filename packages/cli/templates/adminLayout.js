@@ -1,13 +1,17 @@
+import path from "node:path";
+
 import { importPath } from "../src/project/importPath.js";
 import { GENERATED_FILE_MARKER } from "../src/utils/fileActions.js";
 
 export function adminLayoutTemplate(layout, layoutPath, registryPath) {
+  const authActionsPath = path.join(layout.switchboardDir, "auth-actions.ts");
   return `
     // ${GENERATED_FILE_MARKER}
     import "./switchboard.css";
     import Link from "next/link";
     import { headers } from "next/headers";
     import { resources } from "${importPath(layout, layoutPath, registryPath)}";
+    import { logout } from "${importPath(layout, layoutPath, authActionsPath)}";
 
     export default async function AdminLayout({
       children,
@@ -25,7 +29,7 @@ export function adminLayoutTemplate(layout, layoutPath, registryPath) {
       return (
         <div className="sb-admin-shell">
           <header className="sb-admin-header">
-            <nav className="sb-admin-nav">
+            <nav className="sb-admin-nav" aria-label="Primary">
               <Link className="sb-admin-brand" href="/admin">
                 Switchboard
               </Link>
@@ -33,9 +37,11 @@ export function adminLayoutTemplate(layout, layoutPath, registryPath) {
                 <Link className="sb-admin-home-link" href="/">
                   Back to site
                 </Link>
-                <Link className="sb-button sb-button-secondary" href="/admin/logout">
-                  Logout
-                </Link>
+                <form action={logout}>
+                  <button className="sb-button sb-button-secondary" type="submit">
+                    Logout
+                  </button>
+                </form>
               </div>
             </nav>
           </header>

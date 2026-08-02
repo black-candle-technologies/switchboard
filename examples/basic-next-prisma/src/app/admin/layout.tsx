@@ -3,6 +3,7 @@ import "./switchboard.css";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { resources } from "@/switchboard/registry";
+import { logout } from "@/switchboard/auth-actions";
 
 export default async function AdminLayout({
   children,
@@ -19,7 +20,7 @@ export default async function AdminLayout({
   return (
     <div className="sb-admin-shell">
       <header className="sb-admin-header">
-        <nav className="sb-admin-nav">
+        <nav className="sb-admin-nav" aria-label="Primary">
           <Link className="sb-admin-brand" href="/admin">
             Switchboard
           </Link>
@@ -27,12 +28,11 @@ export default async function AdminLayout({
             <Link className="sb-admin-home-link" href="/">
               Back to site
             </Link>
-            <Link
-              className="sb-button sb-button-secondary"
-              href="/admin/logout"
-            >
-              Logout
-            </Link>
+            <form action={logout}>
+              <button className="sb-button sb-button-secondary" type="submit">
+                Logout
+              </button>
+            </form>
           </div>
         </nav>
       </header>

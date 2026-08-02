@@ -116,7 +116,6 @@ test("init creates support files in a src/app project", async () => {
     "src/app/admin/layout.tsx",
     "src/app/admin/page.tsx",
     "src/app/admin/login/page.tsx",
-    "src/app/admin/logout/route.ts",
   ];
   await Promise.all(
     expectedFiles.map((file) => access(path.join(projectRoot, file))),
@@ -132,7 +131,8 @@ test("init creates support files in a src/app project", async () => {
   );
   assert.match(layout, /import "\.\/switchboard\.css"/);
   assert.match(layout, /className="sb-admin-shell"/);
-  assert.match(layout, /href="\/admin\/logout"/);
+  assert.match(layout, /className="sb-admin-nav" aria-label="Primary"/);
+  assert.match(layout, /<form action=\{logout\}>/);
   assert.match(stylesheet, /\.sb-admin-shell/);
   assert.match(stylesheet, /\.sb-table/);
   assert.match(stylesheet, /\.sb-form/);
@@ -150,6 +150,9 @@ test("init creates support files in a src/app project", async () => {
   assert.match(smartForm, /className="sb-form-control sb-textarea"/);
   assert.match(smartForm, /className="sb-form-control sb-select"/);
   assert.match(smartForm, /useActionState/);
+  assert.match(smartForm, /submittedValues\.current = new FormData/);
+  assert.match(smartForm, /\}, \[fields, state\]\);/);
+  assert.match(smartForm, /if \(field\.widget\.type === "password"\) continue/);
   assert.match(smartForm, /relationOptions/);
   const deleteButton = await readFile(
     path.join(projectRoot, "src", "components", "form", "DeleteButton.tsx"),

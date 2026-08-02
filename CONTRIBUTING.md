@@ -4,7 +4,7 @@
 
 Requirements:
 
-- Node.js 18 or newer
+- Node.js 20.9.0 or newer
 - npm
 
 ```bash
@@ -59,15 +59,28 @@ The CLI expects its Prisma schema at `src/prisma/schema.prisma`.
 
 ## Releases
 
-From `packages/cli`, update the package version and keep the version reported by
-`bin/switchboard.js` in sync:
+Before publishing the CLI:
 
 ```bash
-npm version <patch|minor|major>
-npm publish --access public
+npm test
+npm run lint
+npm run build
+cd packages/cli
+npm pack --dry-run
 ```
 
-Tag releases as `cli-vX.Y.Z`.
+Confirm that the package contains only `bin`, `src`, `templates`, `README.md`,
+`LICENSE`, and `package.json`. Tests, fixtures, example databases, environment
+files, and local build artifacts must not be included.
+
+For the `0.6.0-beta.2` public beta, publish with:
+
+```bash
+npm publish --access public --tag beta
+```
+
+Keep `packages/cli/package.json`, the CLI version output, and the CLI README in
+sync. Tag releases as `cli-vX.Y.Z`.
 
 ## Commit Style
 

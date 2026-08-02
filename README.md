@@ -11,12 +11,16 @@ published as
 From an existing Next.js App Router and Prisma project:
 
 ```bash
-npm install --save-dev @lanebucher/switchboard
+npm install -D @lanebucher/switchboard@beta
 npx switchboard init
 npx switchboard generate --pages
 npx switchboard auth seed-admin
 npm run dev
 ```
+
+> **Beta warning:** Switchboard is in early beta. Test it in a branch first and
+> use `--dry-run` before writing generated files. Change any default admin
+> credentials in the host project before deploying to production.
 
 Before generation, configure Prisma normally. For SQLite:
 
@@ -56,7 +60,7 @@ npm run example:smoke
 
 Requirements:
 
-- Node.js 18 or newer
+- Node.js 20.9.0 or newer
 - npm
 
 Set up the repository:
@@ -225,7 +229,6 @@ src/app/admin/switchboard.css
 src/app/admin/layout.tsx
 src/app/admin/page.tsx
 src/app/admin/login/page.tsx
-src/app/admin/logout/route.ts
 ```
 
 Root `app` projects receive the same structure without the `src/` prefix.

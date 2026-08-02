@@ -1,6 +1,7 @@
 {
   "name": "@lanebucher/switchboard",
-  "version": "0.4.2",
+  "version": "0.6.0-beta.2",
+  "description": "Generate Prisma-backed admin resources and Next.js App Router pages.",
   "private": false,
   "type": "module",
   "bin": {
@@ -14,6 +15,14 @@
     "LICENSE"
   ],
   "license": "MIT",
+  "keywords": [
+    "admin",
+    "cli",
+    "code-generation",
+    "nextjs",
+    "prisma",
+    "typescript"
+  ],
   "author": "Lane Bucher <lane.bucher15@gmail.com>",
   "repository": {
     "type": "git",
@@ -23,8 +32,12 @@
     "url": "https://github.com/black-candle-technologies/switchboard/issues"
   },
   "homepage": "https://github.com/black-candle-technologies/switchboard#readme",
+  "publishConfig": {
+    "access": "public",
+    "tag": "beta"
+  },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.9.0"
   },
   "dependencies": {
     "chalk": "^5.3.0",

@@ -1,13 +1,13 @@
 # @lanebucher/switchboard
 
-Version 0.4.2
+Version 0.6.0-beta.2
 
 Switchboard generates Prisma-backed resource configuration and optional
 Next.js App Router admin pages.
 
 ## Requirements
 
-- Node.js 18 or newer
+- Node.js 20.9.0 or newer
 - A Next.js and Prisma project using TypeScript
 - A Prisma schema at `src/prisma/schema.prisma` or `prisma/schema.prisma`
 
@@ -16,8 +16,12 @@ An `@/*` path alias is supported but not required.
 ## Installation
 
 ```bash
-npm install --save-dev @lanebucher/switchboard
+npm install -D @lanebucher/switchboard@beta
 ```
+
+> **Beta warning:** Switchboard is in early beta. Test it in a branch first and
+> use `--dry-run` before writing generated files. Change any default admin
+> credentials in the host project before deploying to production.
 
 ## Quick Start
 
@@ -32,7 +36,7 @@ SWITCHBOARD_SESSION_SECRET="replace-with-at-least-32-random-characters"
 Then run:
 
 ```bash
-npm install --save-dev @lanebucher/switchboard
+npm install -D @lanebucher/switchboard@beta
 npx switchboard init
 npx switchboard generate --pages
 npx switchboard auth seed-admin
@@ -45,6 +49,10 @@ production.
 
 Run the normal Prisma migration and client generation commands before starting
 the app. `init` supports both `src/app` and root `app` projects.
+
+The default admin login is:
+User: admin
+Password: password
 
 ## Example App
 
@@ -162,7 +170,6 @@ src/
         |-- switchboard.css
         |-- layout.tsx
         |-- login/page.tsx
-        |-- logout/route.ts
         `-- page.tsx
 ```
 

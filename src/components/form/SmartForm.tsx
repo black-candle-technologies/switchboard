@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 
 import type { FieldConfig } from "@/switchboard/types";
 import type { FormActionState, RelationOption } from "@/switchboard/types";
@@ -28,6 +28,34 @@ export function SmartForm({
   action,
 }: Props) {
   const [state, formAction, isPending] = useActionState(action, {});
+  const formRef = useRef<HTMLFormElement>(null);
+  const submittedValues = useRef<FormData | null>(null);
+
+  useEffect(() => {
+    if (!state.error || !formRef.current || !submittedValues.current) return;
+
+    for (const field of fields) {
+      if (field.widget.type === "password") continue;
+
+      const values = submittedValues.current
+        .getAll(field.name)
+        .map((value) => String(value));
+      const controls = formRef.current.querySelectorAll<
+        HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+      >(`[name="${CSS.escape(field.name)}"]`);
+      const control =
+        Array.from(controls).find(
+          (element) =>
+            !(element instanceof HTMLInputElement && element.type === "hidden"),
+        ) ?? controls.item(0);
+
+      if (control instanceof HTMLInputElement && control.type === "checkbox") {
+        control.checked = values.includes("true");
+      } else if (control) {
+        control.value = values[0] ?? "";
+      }
+    }
+  }, [fields, state]);
 
   return (
     <section className="sb-page sb-page-narrow">
@@ -37,7 +65,14 @@ export function SmartForm({
           <h1 className="sb-page-title">{title}</h1>
         </div>
       </div>
-      <form action={formAction} className="sb-card sb-form">
+      <form
+        action={formAction}
+        className="sb-card sb-form"
+        onSubmit={(event) => {
+          submittedValues.current = new FormData(event.currentTarget);
+        }}
+        ref={formRef}
+      >
         {state.error ? (
           <p className="sb-form-error" role="alert">
             {state.error}
